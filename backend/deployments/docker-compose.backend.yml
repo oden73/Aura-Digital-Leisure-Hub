@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  core-go:
+    image: golang:1.22
+    working_dir: /workspace/backend/core-go
+    command: go run ./cmd/api
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../../:/workspace
+
+  ai-engine-python:
+    image: python:3.12-slim
+    working_dir: /workspace/backend/ai-engine-python
+    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8090"
+    ports:
+      - "8090:8090"
+    volumes:
+      - ../../:/workspace

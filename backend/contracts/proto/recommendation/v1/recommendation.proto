@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package recommendation.v1;
+
+option go_package = "aura/backend/contracts/gen/go/recommendation/v1;recommendationv1";
+
+message RecommendationRequest {
+  string user_id = 1;
+  repeated string candidate_ids = 2;
+  int32 limit = 3;
+}
+
+message ScoredItem {
+  string item_id = 1;
+  double score = 2;
+  string source = 3;
+}
+
+message RecommendationResponse {
+  repeated ScoredItem items = 1;
+  string reasoning = 2;
+}
+
+service AIEngineService {
+  rpc ComputeCBRecommendations(RecommendationRequest) returns (RecommendationResponse);
+}

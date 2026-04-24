@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Aura Core API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /v1/recommendations:
+    post:
+      summary: Get personalized recommendations
+      responses:
+        "501":
+          description: Not implemented yet
