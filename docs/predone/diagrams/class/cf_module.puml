@@ -1,0 +1,55 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Collaborative Filtering Module" {
+
+    class CFCoordinator {
+        - user2user: User2UserRecommender
+        - item2item: Item2ItemRecommender
+        --
+        + GetRecommendations(user_id: UUID, k: Int): List<ScoredItem>
+        + SelectStrategy(profile: UserProfile): CFStrategy
+    }
+
+    enum CFStrategy {
+        USER_BASED
+        ITEM_BASED
+        HYBRID
+    }
+
+    interface ICFRecommender {
+        + ComputeScores(user_id: UUID, candidates: List<UUID>): List<ScoredItem>
+    }
+
+    class User2UserRecommender implements ICFRecommender {
+        - similarity_calc: UserSimilarityCalculator
+        - neighborhood: NeighborhoodBuilder
+        - predictor: RatingPredictor
+        --
+        + ComputeScores(user_id: UUID, candidates: List<UUID>): List<ScoredItem>
+    }
+
+    class Item2ItemRecommender implements ICFRecommender {
+        - similarity_calc: ItemSimilarityCalculator
+        - neighborhood: NeighborhoodBuilder
+        - predictor: RatingPredictor
+        --
+        + ComputeScores(user_id: UUID, candidates: List<UUID>): List<ScoredItem>
+    }
+
+    class ScoredItem <<ValueObject>> {
+        + UUID item_id
+        + Float score
+        + String source
+    }
+
+    CFCoordinator o-- User2UserRecommender
+    CFCoordinator o-- Item2ItemRecommender
+    CFCoordinator ..> CFStrategy
+    ICFRecommender ..> ScoredItem
+}
+
+@enduml

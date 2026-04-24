@@ -1,0 +1,81 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Infrastructure Layer" {
+
+    interface IExternalAdapter {
+        + FetchMetadata(external_id: String): ExternalData
+        + Search(query: String, limit: Int): List<ExternalData>
+        + ValidateConnection(): Boolean
+    }
+
+    class SteamAPIAdapter implements IExternalAdapter {
+        - api_key: String
+        - base_url: String
+        - http_client: HTTPClient
+        --
+        + FetchMetadata(steam_id: String): ExternalData
+        - ParseGameDetails(response: JSONObject): ExternalData
+    }
+
+    class TMDBAdapter implements IExternalAdapter {
+        - api_key: String
+        --
+        + FetchMetadata(tmdb_id: String): ExternalData
+        - MapToInternalFormat(data: TMDBResponse): ExternalData
+    }
+
+    class BooksAPIAdapter implements IExternalAdapter {
+        + FetchMetadata(isbn: String): ExternalData
+    }
+
+    class ExternalData <<DTO>> {
+        + String external_id
+        + String source
+        + String title
+        + Map<String, Any> raw_data
+        --
+        + ToItemMetadata(): ItemMetadata
+    }
+
+    interface IInteractionRepository {
+        + SaveInteraction(interaction: Interaction): Error
+        + GetUserInteractions(user_id: UUID): List<Interaction>
+        + GetInteractionMatrix(): SparseMatrix
+    }
+
+    interface IMetadataRepository {
+        + GetItem(item_id: UUID): ItemMetadata
+        + SaveItem(item: ItemMetadata): Error
+        + SearchByText(query: String): List<ItemMetadata>
+    }
+
+    interface IVectorStorage {
+        + Store(id: UUID, vector: Vector, metadata: Dict): Error
+        + Query(vector: Vector, k: Int, filter: Filter): List<UUID>
+    }
+
+    class RelationalStorageAdapter implements IInteractionRepository, IMetadataRepository {
+        - connection_pool: ConnectionPool
+        - query_builder: SQLQueryBuilder
+        --
+        + SaveInteraction(interaction: Interaction): Error
+        + GetItem(item_id: UUID): ItemMetadata
+        - MapRowToEntity(row: Row): Entity
+    }
+
+    class VectorStorageAdapter implements IVectorStorage {
+        - client: VectorDBClient
+        - collection_name: String
+        --
+        + Query(vector: Vector, k: Int, filter: Filter): List<UUID>
+    }
+
+    IExternalAdapter ..> ExternalData
+    ExternalData ..> ItemMetadata
+}
+
+@enduml

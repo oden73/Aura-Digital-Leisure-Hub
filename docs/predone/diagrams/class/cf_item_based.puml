@@ -1,0 +1,47 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Item2Item Recommendation Component" {
+
+    class Item2ItemRecommender {
+        + ComputeScores(user_id: UUID, candidates: List<UUID>): List<ScoredItem>
+    }
+
+    class ItemSimilarityCalculator {
+        - matrix: InteractionMatrix
+        --
+        + Calculate(item_i: UUID, item_j: UUID): Float
+        - GetCommonUsers(item_i: UUID, item_j: UUID): Set<UUID>
+    }
+
+    class NeighborhoodBuilder {
+        - threshold_beta: Float
+        --
+        + BuildNeighborhood(item_id: UUID, k: Int): List<Neighbor>
+    }
+
+    class RatingPredictor {
+        + PredictRating(user_id: UUID, item_id: UUID, neighbors: List<Neighbor>): Float
+    }
+
+    class InteractionMatrix {
+        + GetItemRatings(item_id: UUID): Map<UUID, Float>
+        + GetCommonUsers(item_i: UUID, item_j: UUID): Set<UUID>
+    }
+
+    class Neighbor <<ValueObject>> {
+        + UUID item_id
+        + Float similarity
+    }
+
+    Item2ItemRecommender --> ItemSimilarityCalculator
+    Item2ItemRecommender --> NeighborhoodBuilder
+    Item2ItemRecommender --> RatingPredictor
+    ItemSimilarityCalculator --> InteractionMatrix
+    NeighborhoodBuilder ..> Neighbor
+}
+
+@enduml

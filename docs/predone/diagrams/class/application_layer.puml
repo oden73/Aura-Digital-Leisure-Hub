@@ -1,0 +1,75 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Application Layer" {
+
+    class APIGateway {
+        - router: RequestRouter
+        - auth: AuthenticationService
+        - handlers: Map<String, IRequestHandler>
+        --
+        + HandleRequest(request: HTTPRequest): HTTPResponse
+        + RegisterHandler(path: String, handler: IRequestHandler)
+    }
+
+    interface IRequestHandler {
+        + Handle(ctx: RequestContext): Response
+        + ValidateRequest(ctx: RequestContext): Error
+    }
+
+    class RecommendationController implements IRequestHandler {
+        - use_case: GetRecommendationsUseCase
+        --
+        + Handle(ctx: RequestContext): Response
+        + ValidateRequest(ctx: RequestContext): Error
+    }
+
+    class SearchController implements IRequestHandler {
+        - use_case: SearchContentUseCase
+        --
+        + Handle(ctx: RequestContext): Response
+    }
+
+    class UserProfileController implements IRequestHandler {
+        - use_case: ManageProfileUseCase
+        --
+        + Handle(ctx: RequestContext): Response
+    }
+
+    class AuthenticationService {
+        - token_manager: ITokenManager
+        - user_repo: IUserRepository
+        --
+        + Authenticate(credentials: Credentials): Token
+        + ValidateToken(token: String): User
+        + RefreshToken(refresh_token: String): Token
+    }
+
+    class RequestRouter {
+        + Route(path: String, method: HTTPMethod): IRequestHandler
+        + RegisterRoute(route: RouteDefinition)
+    }
+
+    class RequestContext {
+        + User authenticated_user
+        + Map<String, String> params
+        + Dict body
+        + HTTPHeaders headers
+    }
+
+    interface ITokenManager {
+        + Generate(user_id: UUID): Token
+        + Validate(token: String): Boolean
+    }
+
+    APIGateway o-- RequestRouter
+    APIGateway o-- AuthenticationService
+    APIGateway --> IRequestHandler
+    IRequestHandler ..> RequestContext
+    AuthenticationService --> ITokenManager
+}
+
+@enduml

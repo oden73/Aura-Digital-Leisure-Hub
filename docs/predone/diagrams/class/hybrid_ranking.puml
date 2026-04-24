@@ -1,0 +1,78 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Hybrid Ranking Module" {
+
+    class HybridRankingOrchestrator {
+        - cf_module: CFCoordinator
+        - cb_module: ContentBasedRecommender
+        - aggregator: ScoreAggregator
+        - ranker: FinalRanker
+        --
+        + GetHybridRecommendations(user_id: UUID, k: Int): List<ScoredItem>
+    }
+
+    class ScoreAggregator {
+        - weight_cf: Float
+        - weight_cb: Float
+        --
+        + AggregateScores(cf_scores: List<ScoredItem>, cb_scores: List<ScoredItem>): List<ScoredItem>
+        - NormalizeScores(scores: List<Float>): List<Float>
+        - WeightedSum(scores: Map<UUID, ScorePair>): Map<UUID, Float>
+    }
+
+    class FinalRanker {
+        - ranking_rules: List<IRankingRule>
+        --
+        + Rank(items: List<ScoredItem>, user_profile: UserProfile): List<ScoredItem>
+        + ApplyRules(items: List<ScoredItem>): List<ScoredItem>
+    }
+
+    interface IRankingRule {
+        + Apply(items: List<ScoredItem>, context: RankingContext): List<ScoredItem>
+    }
+
+    class DiversityRule implements IRankingRule {
+        - diversity_threshold: Float
+        --
+        + Apply(items: List<ScoredItem>, context: RankingContext): List<ScoredItem>
+        - CalculateGenreDiversity(items: List<ScoredItem>): Float
+    }
+
+    class RecencyBoostRule implements IRankingRule {
+        - decay_factor: Float
+        --
+        + Apply(items: List<ScoredItem>, context: RankingContext): List<ScoredItem>
+        - ApplyTemporalDecay(score: Float, release_date: Date): Float
+    }
+
+    class PopularityBalanceRule implements IRankingRule {
+        + Apply(items: List<ScoredItem>, context: RankingContext): List<ScoredItem>
+    }
+
+    class ScoredItem <<ValueObject>> {
+        + UUID item_id
+        + Float score
+        + String source
+        + Dict metadata
+        --
+        + CombineWith(other: ScoredItem, weight: Float): ScoredItem
+    }
+
+    class RankingContext {
+        + UserProfile user_profile
+        + Date current_date
+        + Int target_count
+    }
+
+    HybridRankingOrchestrator --> ScoreAggregator
+    HybridRankingOrchestrator --> FinalRanker
+    FinalRanker o-- IRankingRule
+    ScoreAggregator ..> ScoredItem
+    FinalRanker ..> RankingContext
+}
+
+@enduml

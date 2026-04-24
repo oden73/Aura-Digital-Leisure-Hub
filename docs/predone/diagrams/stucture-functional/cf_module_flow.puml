@@ -1,0 +1,43 @@
+@startuml
+!theme plain
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+
+package "Collaborative Filtering Module" {
+
+    package "User2User Component" {
+        [User Similarity Calculator] as SimU
+        [User Neighborhood Builder] as NeighU
+        [User-Based Predictor] as PredU
+    }
+
+    package "Item2Item Component" {
+        [Item Similarity Calculator] as SimI
+        [Item Neighborhood Builder] as NeighI
+        [Item-Based Predictor] as PredI
+    }
+
+    [CF Coordinator] as CFCoord
+}
+
+database "Relational Storage" {
+    folder "Interaction Matrix Rui"
+    folder "User Statistics"
+    folder "Item Statistics"
+}
+
+CFCoord --> SimU
+CFCoord --> SimI
+
+SimU --> NeighU
+NeighU --> PredU
+
+SimI --> NeighI
+NeighI --> PredI
+
+PredU --> "Relational Storage"
+PredI --> "Relational Storage"
+SimU --> "Relational Storage"
+SimI --> "Relational Storage"
+
+@enduml

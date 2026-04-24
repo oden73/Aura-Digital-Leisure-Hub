@@ -1,0 +1,46 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Content Similarity & Cold Start" {
+
+    class ContentSimilarityEngine {
+        - vector_store: IVectorStorage
+        --
+        + ComputeSimilarity(item_a: UUID, item_b: UUID): Float
+        + FindKNearest(item_id: UUID, k: Int): List<UUID>
+        - CosineSimilarity(vec_a: Vector, vec_b: Vector): Float
+    }
+
+    class ColdStartHandler {
+        - similarity_engine: ContentSimilarityEngine
+        - onboarding: IOnboardingService
+        --
+        + GenerateInitialRecommendations(user_id: UUID): List<ScoredItem>
+        + HandleNewItem(item_id: UUID): Error
+    }
+
+    interface IVectorStorage {
+        + Query(vector: Vector, k: Int): List<UUID>
+        + GetVector(id: UUID): Vector
+    }
+
+    interface IOnboardingService {
+        + GetUserPreferences(user_id: UUID): List<String>
+    }
+
+    class ScoredItem <<ValueObject>> {
+        + UUID item_id
+        + Float score
+        + String source
+    }
+
+    ContentSimilarityEngine --> IVectorStorage
+    ColdStartHandler --> ContentSimilarityEngine
+    ColdStartHandler ..> IOnboardingService
+    ColdStartHandler ..> ScoredItem
+}
+
+@enduml

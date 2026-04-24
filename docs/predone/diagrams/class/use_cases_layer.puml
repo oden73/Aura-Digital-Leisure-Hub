@@ -1,0 +1,69 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Use Cases Layer" {
+
+    class GetRecommendationsUseCase {
+        - hybrid_ranker: HybridRankingOrchestrator
+        - user_repo: IUserRepository
+        - filter_service: FilterService
+        --
+        + Execute(user_id: UUID, filters: RecommendationFilters): RecommendationResponse
+        - ApplyFilters(items: List<ScoredItem>, filters: RecommendationFilters): List<ScoredItem>
+    }
+
+    class SearchContentUseCase {
+        - metadata_repo: IMetadataRepository
+        - similarity_engine: ContentSimilarityEngine
+        --
+        + Execute(query: SearchQuery): List<ItemMetadata>
+        - RankByRelevance(results: List<ItemMetadata>, query: String): List<ItemMetadata>
+    }
+
+    class UpdateInteractionUseCase {
+        - interaction_repo: IInteractionRepository
+        - embedding_manager: EmbeddingManager
+        --
+        + Execute(user_id: UUID, item_id: UUID, interaction: InteractionData): Error
+        - UpdateUserProfile(user_id: UUID)
+        - InvalidateCache(user_id: UUID)
+    }
+
+    class SyncExternalContentUseCase {
+        - adapters: List<IExternalAdapter>
+        - metadata_repo: IMetadataRepository
+        - embedding_manager: EmbeddingManager
+        --
+        + Execute(external_id: String, source: String): ItemMetadata
+        - TransformExternalData(data: ExternalData): ItemMetadata
+    }
+
+    class RecommendationFilters <<ValueObject>> {
+        + List<String> genres
+        + List<MediaType> media_types
+        + DateRange release_period
+        + RatingRange rating_range
+    }
+
+    class RecommendationResponse <<DTO>> {
+        + List<RecommendationItem> items
+        + String reasoning
+        + Map<String, Any> metadata
+    }
+
+    class RecommendationItem <<DTO>> {
+        + UUID item_id
+        + String title
+        + Float score
+        + String match_reason
+    }
+
+    GetRecommendationsUseCase ..> RecommendationFilters
+    GetRecommendationsUseCase ..> RecommendationResponse
+    RecommendationResponse *-- RecommendationItem
+}
+
+@enduml

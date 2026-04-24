@@ -1,0 +1,125 @@
+@startuml
+!theme plain
+hide circle
+skinparam linetype ortho
+
+package "User Management" {
+    entity "Users" as users {
+        * user_id : UUID 
+        --
+        username : VARCHAR(50)
+        email : VARCHAR(255)
+        password_hash : TEXT
+        created_at : TIMESTAMP
+    }
+
+    entity "External_Accounts" as external {
+        * account_id : BIGINT
+        --
+        user_id : UUID <<FK>>
+        service_name : ENUM(Steam, EpicGames, Kinopoisk, Netflix, Goodreads, YandexBooks)
+        external_user_id : VARCHAR(255)
+        external_profile_url : TEXT
+        last_synced_at : TIMESTAMP
+    }
+
+    entity "User_Interactions" as interactions {
+        * interaction_id : BIGINT 
+        --
+        user_id : UUID 
+        item_id : UUID 
+        status : ENUM(Planned, InProgress, Completed, Dropped)
+        rating : INT <<1-10>>
+        is_favorite : BOOLEAN
+        review_text : TEXT
+        updated_at : TIMESTAMP
+    }
+}
+
+users ||--o{ external : "links to"
+users ||--o{ interactions : "interacts with"
+
+package "Core Multimedia Catalog" {
+    entity "Base_Items" as items {
+        * item_id : UUID 
+        --
+        title : VARCHAR(255)
+        original_title : VARCHAR(255)
+        description : TEXT 
+        release_date : DATE
+        cover_image_url : TEXT
+        average_rating : DECIMAL
+        media_type : ENUM(Book, Cinema, Game)
+        -- Base Criterias --
+        genre : VARCHAR(100) 
+        setting : VARCHAR(100) 
+        themes : TEXT 
+        tonality : VARCHAR(100) 
+        target_audience : VARCHAR(50)
+    }
+}
+
+package "Media Specific Details" {
+    entity "Book_Details" as books {
+        * item_id : UUID 
+        --
+        author : VARCHAR(255) 
+        publisher : VARCHAR(255)
+        literary_form : VARCHAR(100) 
+        volume_format : VARCHAR(100) 
+        narrative_type : VARCHAR(100) 
+        artistic_style : VARCHAR(100) 
+        page_count : INT
+    }
+
+    entity "Cinema_Details" as cinema {
+        * item_id : UUID
+        --
+        director : VARCHAR(255) 
+        cast : TEXT 
+        format : VARCHAR(100) 
+        production_method : VARCHAR(100)
+        visual_style : VARCHAR(100)
+        plot_structure : VARCHAR(100) 
+        duration_mins : INT
+    }
+
+    entity "Game_Details" as games {
+        * item_id : UUID <<FK>>
+        --
+        developer : VARCHAR(255)
+        gameplay_genre : VARCHAR(100) 
+        platforms : VARCHAR(255)
+        player_count : VARCHAR(100)
+        perspective : VARCHAR(100)
+        plot_genre : VARCHAR(100)
+        world_structure : VARCHAR(100) 
+        monetization : VARCHAR(100)
+    }
+}
+
+package "AI Search Layer" {
+    entity "Vector_Store" as vectors {
+        * item_id : UUID <<FK>>
+        --
+        embedding_vector : VECTOR(1536)
+        last_vectorized_at : TIMESTAMP
+    }
+}
+
+' Связи
+users ||--o{ interactions : "interacts with"
+items ||--o{ interactions : "is assessed"
+
+items ||--o| books : "is a Book"
+items ||--o| cinema : "is Cinema"
+items ||--o| games : "is a Game"
+
+items ||--|| vectors : "represented by"
+
+note right of items
+  Base items:
+  name, poster and criterias.
+end note
+
+@enduml
