@@ -1,0 +1,47 @@
+@startuml
+!theme plain
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+
+package "Presentation Layer" {
+    [Web Client] as UI
+}
+
+package "Application Layer" {
+    [API Gateway] as Gateway
+    [Authentication Service] as Auth
+}
+
+package "Domain Layer" {
+    [Collaborative Filtering Module] as CF
+    [Content-Based Module] as CB
+    [Hybrid Ranking Module] as Hybrid
+}
+
+package "Data Access Layer" {
+    database "Relational Storage" as Relational {
+        folder "Interaction Matrix Rui"
+        folder "User Profiles"
+    }
+    database "Vector Storage" as Vector {
+        folder "Content Embeddings"
+    }
+}
+
+cloud "External Data Sources" {
+    [Entertainment Services APIs] as External
+}
+
+UI --> Gateway : HTTP
+Gateway --> Auth
+Gateway --> CF
+Gateway --> CB
+CF --> Hybrid
+CB --> Hybrid
+Hybrid --> Gateway
+
+CF --> Relational
+CB --> Vector
+Gateway --> External
+
+@enduml

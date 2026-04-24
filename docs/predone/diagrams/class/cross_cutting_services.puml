@@ -1,0 +1,60 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "Cross-Cutting Services" {
+
+    class CacheService {
+        - cache_provider: ICacheProvider
+        - ttl_config: Map<String, Duration>
+        --
+        + Get(key: String): CachedData
+        + Set(key: String, value: Any, ttl: Duration): Error
+        + Invalidate(pattern: String): Error
+    }
+
+    interface ICacheProvider {
+        + Get(key: String): Any
+        + Set(key: String, value: Any, ttl: Duration): Error
+        + Delete(key: String): Error
+    }
+
+    class FilterService {
+        + ApplyGenreFilter(items: List<ScoredItem>, genres: List<String>): List<ScoredItem>
+        + ApplyDateRangeFilter(items: List<ScoredItem>, range: DateRange): List<ScoredItem>
+        + ApplyRatingFilter(items: List<ScoredItem>, min_rating: Float): List<ScoredItem>
+    }
+
+    class ValidationService {
+        + ValidateUserInput(data: Map<String, Any>, schema: Schema): Error
+        + SanitizeText(text: String): String
+    }
+
+    class LoggingService {
+        - log_level: LogLevel
+        --
+        + LogRequest(ctx: RequestContext)
+        + LogError(error: Error, ctx: RequestContext)
+        + LogPerformance(operation: String, duration: Duration)
+    }
+
+    class MetricsCollector {
+        - metrics_storage: IMetricsStorage
+        --
+        + RecordRecommendationRequest(user_id: UUID, latency: Duration)
+        + RecordCacheHit(key: String)
+        + RecordExternalAPICall(service: String, status: Int)
+    }
+
+    interface IMetricsStorage {
+        + Store(metric: Metric): Error
+        + Query(filter: MetricFilter): List<Metric>
+    }
+
+    CacheService --> ICacheProvider
+    MetricsCollector --> IMetricsStorage
+}
+
+@enduml

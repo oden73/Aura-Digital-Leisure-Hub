@@ -1,0 +1,42 @@
+@startuml
+!theme plain
+
+actor User
+
+box "Presentation Layer"
+    participant "Client Application" as UI
+end box
+
+box "Application Layer"
+    participant "API Gateway" as Gateway
+end box
+
+box "Domain Layer"
+    participant "CF Module" as CF
+    participant "CB Module" as CB
+    participant "Hybrid Ranker" as Ranker
+end box
+
+box "Data Access Layer"
+    database "Relational Storage" as Relational
+    database "Vector Storage" as Vector
+end box
+
+User -> UI
+UI -> Gateway : request recommendations
+Gateway -> CF
+Gateway -> CB
+
+CF -> Relational : retrieve Rui
+CF --> Gateway : CF scores
+
+CB -> Vector : vector similarity search
+CB -> Relational : retrieve Iu
+CB --> Gateway : CB scores
+
+Gateway -> Ranker : aggregate scores
+Ranker --> Gateway : ranked list
+Gateway --> UI : recommendation response
+UI --> User : display results
+
+@enduml

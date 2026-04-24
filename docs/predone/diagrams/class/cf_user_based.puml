@@ -1,0 +1,57 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam monochrome true
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+package "User2User Recommendation Component" {
+
+    class User2UserRecommender {
+        + ComputeScores(user_id: UUID, candidates: List<UUID>): List<ScoredItem>
+    }
+
+    class UserSimilarityCalculator {
+        - matrix: InteractionMatrix
+        --
+        + Calculate(user_u: UUID, user_v: UUID): Float
+        - NormalizeByVariance(rating: Float, user_id: UUID): Float
+    }
+
+    class NeighborhoodBuilder {
+        - threshold_alpha: Float
+        --
+        + BuildNeighborhood(user_id: UUID, k: Int): List<Neighbor>
+    }
+
+    class RatingPredictor {
+        - user_stats: IUserStatisticsRepository
+        --
+        + PredictRating(user_id: UUID, item_id: UUID, neighbors: List<Neighbor>): Float
+        - WeightedAverage(scores: List<Float>, weights: List<Float>): Float
+    }
+
+    class InteractionMatrix {
+        + GetUserRatings(user_id: UUID): Map<UUID, Float>
+        + GetMeanRating(user_id: UUID): Float
+        + GetVariance(user_id: UUID): Float
+    }
+
+    interface IUserStatisticsRepository {
+        + GetMeanRating(user_id: UUID): Float
+        + GetVariance(user_id: UUID): Float
+    }
+
+    class Neighbor <<ValueObject>> {
+        + UUID user_id
+        + Float similarity
+    }
+
+    User2UserRecommender --> UserSimilarityCalculator
+    User2UserRecommender --> NeighborhoodBuilder
+    User2UserRecommender --> RatingPredictor
+    UserSimilarityCalculator --> InteractionMatrix
+    NeighborhoodBuilder ..> Neighbor
+    RatingPredictor ..> IUserStatisticsRepository
+}
+
+@enduml
