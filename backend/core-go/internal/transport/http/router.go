@@ -22,5 +22,5 @@ func NewRouter(h *handlers.Handlers) http.Handler {
 	mux.HandleFunc("POST /v1/sync/external", handlers.Auth(h.Auth.Auth.Tokens, h.HandleSyncExternal))
 	mux.HandleFunc("GET /v1/profile", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetProfile))
 
-	return mux
+	return handlers.Recover(mux)
 }

@@ -53,17 +53,17 @@ type recommendationsRequest struct {
 func (h *Handlers) HandleGetRecommendations(w http.ResponseWriter, r *http.Request) {
 	var req recommendationsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
 		return
 	}
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	resp, err := h.GetRecommendations.Execute(uid, req.Filters)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -80,7 +80,7 @@ func (h *Handlers) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	query := usecase.SearchQuery{Text: r.URL.Query().Get("q"), Limit: limit}
 	items, err := h.Search.Execute(query)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -90,12 +90,12 @@ func (h *Handlers) HandleSearch(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) HandleGetContent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
-		http.Error(w, "missing id", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "missing_id", "Missing id")
 		return
 	}
 	it, err := h.GetContent.Execute(id)
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "not_found", "Not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, it)
@@ -110,16 +110,24 @@ type interactionRequest struct {
 func (h *Handlers) HandleUpdateInteraction(w http.ResponseWriter, r *http.Request) {
 	var req interactionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.ItemID == "" {
+		writeError(w, http.StatusBadRequest, "missing_item_id", "Missing item_id")
+		return
+	}
+	if req.Data.Rating < 0 || req.Data.Rating > 10 {
+		writeError(w, http.StatusBadRequest, "invalid_rating", "Rating must be 1..10")
 		return
 	}
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	if err := h.UpdateInteraction.Execute(uid, req.ItemID, req.Data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -129,12 +137,12 @@ func (h *Handlers) HandleUpdateInteraction(w http.ResponseWriter, r *http.Reques
 func (h *Handlers) HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	items, err := h.Library.Execute(uid)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -144,7 +152,7 @@ func (h *Handlers) HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) HandleGetLibraryItems(w http.ResponseWriter, r *http.Request) {
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	limit := 0
@@ -155,7 +163,7 @@ func (h *Handlers) HandleGetLibraryItems(w http.ResponseWriter, r *http.Request)
 	}
 	items, err := h.LibraryItems.Execute(uid, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -170,12 +178,16 @@ type syncRequest struct {
 func (h *Handlers) HandleSyncExternal(w http.ResponseWriter, r *http.Request) {
 	var req syncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.ExternalID == "" || req.Source == "" {
+		writeError(w, http.StatusBadRequest, "missing_fields", "Missing external_id or source")
 		return
 	}
 	item, err := h.SyncExternal.Execute(req.ExternalID, req.Source)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
@@ -185,12 +197,12 @@ func (h *Handlers) HandleSyncExternal(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
 		return
 	}
 	u, err := h.Users.GetByID(uid)
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "not_found", "Not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -199,10 +211,4 @@ func (h *Handlers) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 		"email":      u.Email,
 		"created_at": u.CreatedAt,
 	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
 }

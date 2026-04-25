@@ -21,12 +21,12 @@ func authMiddleware(tokens auth.TokenManager, next http.HandlerFunc) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		h := r.Header.Get("Authorization")
 		if !strings.HasPrefix(h, "Bearer ") {
-			http.Error(w, "missing token", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "missing_token", "Missing token")
 			return
 		}
 		uid, err := tokens.Validate(strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
 		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "invalid_token", "Invalid token")
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxUserID, uid)
