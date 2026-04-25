@@ -1,0 +1,124 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional, url format)
+    //   - createdAt: timestamp (required)
+    //   - lastLogin: timestamp (required)
+    //
+    // Collection: users/{userId}/library
+    // Document ID: {itemId}
+    // Fields:
+    //   - itemId: string (required)
+    //   - type: string (required, enum: game, book, movie)
+    //   - title: string (required)
+    //   - addedAt: timestamp (required)
+    //   - status: string (required, enum)
+    //
+    // Collection: users/{userId}/feedback
+    // Document ID: {feedbackId}
+    // Fields:
+    //   - itemId: string (required)
+    //   - sentiment: string (required, enum)
+    //   - moodTag: string (optional)
+    //   - timestamp: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "karpuk.max1@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             isValidEmail(data.email) &&
+             (data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.photoURL == null || isValidUrl(data.photoURL)) &&
+             data.createdAt is timestamp &&
+             data.lastLogin is timestamp;
+    }
+
+    function isValidLibraryItem(data) {
+      return data.itemId is string &&
+             data.type in ['game', 'book', 'movie'] &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.addedAt is timestamp &&
+             data.status in ['to-watch', 'watching', 'completed', 'dropped'];
+    }
+
+    function isValidFeedback(data) {
+      return data.itemId is string &&
+             data.sentiment in ['liked', 'disliked', 'neutral'] &&
+             (data.moodTag == null || (data.moodTag is string && data.moodTag.size() < 50)) &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.createdAt == resource.data.createdAt;
+      
+      match /library/{itemId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidLibraryItem(request.resource.data);
+        allow update: if isOwner(userId) && isValidLibraryItem(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /feedback/{feedbackId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidFeedback(request.resource.data);
+      }
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
