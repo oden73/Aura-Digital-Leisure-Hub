@@ -25,3 +25,13 @@
 .mood-gradient {
   background: radial-gradient(circle at top right, var(--color-brand-500), transparent);
 }
+
+/* Hide scrollbars on horizontal carousels and chat panes while keeping scroll behavior. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
