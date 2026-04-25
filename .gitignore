@@ -1,4 +1,75 @@
-.venv/
-**__pycache__/
-*.pyc
+# ===== OS / Editors =====
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.sublime-project
+*.sublime-workspace
+
+# ===== Logs =====
 *.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Env / Secrets =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+service-account*.json
+
+# ===== Node / Frontend =====
+node_modules/
+dist/
+build/
+.cache/
+.parcel-cache/
+.vite/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# ===== Python / AI engine =====
+.venv/
+venv/
+env/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# ===== Go / core service =====
+backend/core-go/bin/
+backend/core-go/build/
+*.test
+*.out
+vendor/
+
+# ===== Docker / Compose overrides =====
+docker-compose.override.yml
+docker-compose.*.local.yml
+
+# ===== Misc local artifacts =====
+tmp/
+.tmp/
+*.local
