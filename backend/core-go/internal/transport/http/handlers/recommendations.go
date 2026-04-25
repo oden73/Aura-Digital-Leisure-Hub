@@ -14,6 +14,7 @@ type Handlers struct {
 	GetRecommendations usecase.GetRecommendationsUseCase
 	Search             usecase.SearchContentUseCase
 	GetContent         usecase.GetContentUseCase
+	UpsertContent      usecase.UpsertContentUseCase
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
 	Library            usecase.ListLibraryUseCase
@@ -99,6 +100,24 @@ func (h *Handlers) HandleGetContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, it)
+}
+
+// HandleUpsertContent serves POST /v1/content (upsert/insert base item).
+func (h *Handlers) HandleUpsertContent(w http.ResponseWriter, r *http.Request) {
+	var it entities.Item
+	if err := json.NewDecoder(r.Body).Decode(&it); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if it.Title == "" || it.MediaType == "" {
+		writeError(w, http.StatusBadRequest, "missing_fields", "Missing title or media_type")
+		return
+	}
+	if err := h.UpsertContent.Execute(it); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type interactionRequest struct {

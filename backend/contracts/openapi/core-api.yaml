@@ -330,6 +330,23 @@ paths:
         "404":
           description: Not found
 
+  /v1/content:
+    post:
+      summary: Create or update content item (base_items)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Item"
+      responses:
+        "204":
+          description: Saved
+        "401":
+          description: Unauthorized
+
   /v1/recommendations:
     post:
       summary: Get personalized recommendations

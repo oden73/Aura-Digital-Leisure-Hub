@@ -69,6 +69,7 @@ func Run() error {
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, filterSvc)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
+	upsertContentUC := usecase.NewUpsertContent(metadataRepo)
 	updateUC := usecase.NewUpdateInteraction(interactionRepo)
 	libraryUC := usecase.NewListLibrary(interactionRepo)
 	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
@@ -79,6 +80,7 @@ func Run() error {
 	h.Auth = authHandlers
 	h.Users = userRepo
 	h.GetContent = getContentUC
+	h.UpsertContent = upsertContentUC
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	router := httptransport.NewRouter(h)
