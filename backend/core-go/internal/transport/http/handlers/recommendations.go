@@ -42,7 +42,6 @@ func Health(w http.ResponseWriter, _ *http.Request) {
 }
 
 type recommendationsRequest struct {
-	UserID  string                         `json:"user_id"`
 	Filters entities.RecommendationFilters `json:"filters"`
 }
 
@@ -53,7 +52,12 @@ func (h *Handlers) HandleGetRecommendations(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	resp, err := h.GetRecommendations.Execute(req.UserID, req.Filters)
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	resp, err := h.GetRecommendations.Execute(uid, req.Filters)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -73,7 +77,6 @@ func (h *Handlers) HandleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 type interactionRequest struct {
-	UserID string                  `json:"user_id"`
 	ItemID string                  `json:"item_id"`
 	Data   usecase.InteractionData `json:"data"`
 }
@@ -85,7 +88,12 @@ func (h *Handlers) HandleUpdateInteraction(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	if err := h.UpdateInteraction.Execute(req.UserID, req.ItemID, req.Data); err != nil {
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if err := h.UpdateInteraction.Execute(uid, req.ItemID, req.Data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
