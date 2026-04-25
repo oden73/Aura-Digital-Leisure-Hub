@@ -206,18 +206,3 @@ func (r *MetadataRepo) SearchByText(query string, limit int) ([]entities.Item, e
 	}
 	return out, nil
 }
-
-func nullString(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-func nullFloat(v float64) any {
-	if v == 0 {
-		return nil
-	}
-	return v
-}
-

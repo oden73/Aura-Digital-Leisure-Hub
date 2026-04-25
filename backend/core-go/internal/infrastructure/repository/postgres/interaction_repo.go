@@ -169,20 +169,6 @@ func (r *InteractionRepo) GetUserLibraryItems(userID string, limit int) ([]Libra
 	return out, nil
 }
 
-func nullString(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
-func nullInt(v int) any {
-	if v == 0 {
-		return nil
-	}
-	return v
-}
-
 var _ interface {
 	Save(entities.Interaction) error
 	GetUserInteractions(string) ([]entities.Interaction, error)
