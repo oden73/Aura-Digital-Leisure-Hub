@@ -10,4 +10,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/ai-engine-python/requirements.txt
 
+echo "3) Local database (optional)"
+echo "   Run: backend/scripts/dev/db_up.sh"
+
 echo "Done."
