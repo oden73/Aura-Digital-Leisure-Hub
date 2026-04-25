@@ -2,6 +2,182 @@ openapi: 3.0.3
 info:
   title: Aura Core API
   version: 0.1.0
+servers:
+  - url: http://localhost:8080
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access, refresh]
+      properties:
+        access:
+          type: string
+        refresh:
+          type: string
+    RegisterRequest:
+      type: object
+      required: [username, email, password]
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    User:
+      type: object
+      required: [id, username, email, created_at]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+    MediaType:
+      type: string
+      enum: [book, cinema, game]
+    InteractionStatus:
+      type: string
+      enum: [planned, in_progress, completed, dropped]
+    InteractionData:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/InteractionStatus"
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 10
+        is_favorite:
+          type: boolean
+        review_text:
+          type: string
+    Interaction:
+      type: object
+      required: [id, user_id, item_id, status, is_favorite, review_text, updated_at]
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: string
+        item_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/InteractionStatus"
+        rating:
+          type: integer
+          nullable: true
+        is_favorite:
+          type: boolean
+        review_text:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    LibraryItem:
+      type: object
+      required: [interaction, item]
+      properties:
+        interaction:
+          $ref: "#/components/schemas/Interaction"
+        item:
+          $ref: "#/components/schemas/Item"
+    UpdateInteractionRequest:
+      type: object
+      required: [item_id, data]
+      properties:
+        item_id:
+          type: string
+        data:
+          $ref: "#/components/schemas/InteractionData"
+    RecommendationFilters:
+      type: object
+      properties:
+        genres:
+          type: array
+          items: { type: string }
+        media_types:
+          type: array
+          items: { $ref: "#/components/schemas/MediaType" }
+    RecommendationItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+        title:
+          type: string
+        score:
+          type: number
+        match_reason:
+          type: string
+    RecommendationResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RecommendationItem" }
+        reasoning:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    GetRecommendationsRequest:
+      type: object
+      properties:
+        filters:
+          $ref: "#/components/schemas/RecommendationFilters"
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        original_title:
+          type: string
+        description:
+          type: string
+        release_date:
+          type: string
+          format: date-time
+          nullable: true
+        cover_image_url:
+          type: string
+        average_rating:
+          type: number
+        media_type:
+          $ref: "#/components/schemas/MediaType"
+        criteria:
+          type: object
+          properties:
+            genre: { type: string }
+            setting: { type: string }
+            themes: { type: string }
+            tonality: { type: string }
+            target_audience: { type: string }
 paths:
   /health:
     get:
@@ -9,9 +185,210 @@ paths:
       responses:
         "200":
           description: Service is healthy
+
+  /v1/auth/register:
+    post:
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+
+  /v1/auth/login:
+    post:
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid credentials
+
+  /v1/profile:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+
+  /v1/library:
+    get:
+      summary: Get current user library (interactions)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of interactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Interaction"
+        "401":
+          description: Unauthorized
+
+  /v1/library/items:
+    get:
+      summary: Get current user library with item metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Library items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LibraryItem"
+        "401":
+          description: Unauthorized
+
+  /v1/interactions:
+    put:
+      summary: Upsert interaction for current user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInteractionRequest"
+      responses:
+        "204":
+          description: Saved
+        "401":
+          description: Unauthorized
+
+  /v1/search:
+    get:
+      summary: Search content by text
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Item"
+
+  /v1/content/{id}:
+    get:
+      summary: Get content by id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "404":
+          description: Not found
+
+  /v1/content:
+    post:
+      summary: Create or update content item (base_items)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Item"
+      responses:
+        "204":
+          description: Saved
+        "401":
+          description: Unauthorized
+
   /v1/recommendations:
     post:
       summary: Get personalized recommendations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetRecommendationsRequest"
       responses:
-        "501":
-          description: Not implemented yet
+        "200":
+          description: Recommendations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationResponse"
+        "401":
+          description: Unauthorized
+
+  /v1/sync/external:
+    post:
+      summary: Sync external content into catalog
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [external_id, source]
+              properties:
+                external_id: { type: string }
+                source: { type: string }
+      responses:
+        "200":
+          description: Synced item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "401":
+          description: Unauthorized
