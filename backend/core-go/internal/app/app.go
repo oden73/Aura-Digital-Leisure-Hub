@@ -40,7 +40,7 @@ func Run() error {
 	}
 
 	userRepo := repopostgres.NewUserRepo(db)
-	var interactionRepo stubInteractionRepo
+	interactionRepo := repopostgres.NewInteractionRepo(db)
 	var metadataRepo stubMetadataRepo
 
 	tokenMgr := auth.HMACTokenManager{
@@ -69,12 +69,14 @@ func Run() error {
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, filterSvc)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	updateUC := usecase.NewUpdateInteraction(interactionRepo)
+	libraryUC := usecase.NewListLibrary(interactionRepo)
 	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo)
 
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
 	h.Auth = authHandlers
 	h.Users = userRepo
+	h.Library = libraryUC
 	router := httptransport.NewRouter(h)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)

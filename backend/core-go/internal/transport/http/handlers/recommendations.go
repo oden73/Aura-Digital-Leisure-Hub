@@ -14,6 +14,7 @@ type Handlers struct {
 	Search             usecase.SearchContentUseCase
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
+	Library            usecase.ListLibraryUseCase
 	Auth               *AuthHandlers
 	Users              interface {
 		GetByID(userID string) (entities.User, error)
@@ -98,6 +99,21 @@ func (h *Handlers) HandleUpdateInteraction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleGetLibrary serves GET /v1/library.
+func (h *Handlers) HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	items, err := h.Library.Execute(uid)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 type syncRequest struct {
