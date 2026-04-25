@@ -17,7 +17,7 @@ func NewRouter(h *handlers.Handlers) http.Handler {
 	mux.HandleFunc("GET /v1/search", h.HandleSearch)
 	mux.HandleFunc("PUT /v1/interactions", h.HandleUpdateInteraction)
 	mux.HandleFunc("POST /v1/sync/external", h.HandleSyncExternal)
-	mux.HandleFunc("GET /v1/profile", h.HandleGetProfile)
+	mux.HandleFunc("GET /v1/profile", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetProfile))
 
 	return mux
 }

@@ -15,6 +15,9 @@ type Handlers struct {
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
 	Auth               *AuthHandlers
+	Users              interface {
+		GetByID(userID string) (entities.User, error)
+	}
 }
 
 // New constructs an HTTP adapter around the use-case interfaces.
@@ -109,9 +112,24 @@ func (h *Handlers) HandleSyncExternal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// HandleGetProfile is a placeholder until the user-profile use case lands.
-func (h *Handlers) HandleGetProfile(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
+// HandleGetProfile returns the current user (requires auth middleware).
+func (h *Handlers) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	u, err := h.Users.GetByID(uid)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":         u.ID,
+		"username":   u.Username,
+		"email":      u.Email,
+		"created_at": u.CreatedAt,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

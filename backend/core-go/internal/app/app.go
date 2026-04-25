@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"aura/backend/core-go/internal/domain/services/cf"
 	"aura/backend/core-go/internal/domain/services/hybrid"
 	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
+	dbpostgres "aura/backend/core-go/internal/infrastructure/db/postgres"
 	"aura/backend/core-go/internal/infrastructure/external"
+	repopostgres "aura/backend/core-go/internal/infrastructure/repository/postgres"
 	"aura/backend/core-go/internal/pkg/auth"
 	"aura/backend/core-go/internal/pkg/filter"
 	httptransport "aura/backend/core-go/internal/transport/http"
@@ -22,6 +25,12 @@ import (
 func Run() error {
 	cfg := config.Load()
 
+	db, err := dbpostgres.Connect(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
 	// Infrastructure clients / adapters.
 	aiClient := ai_engine.StubClient{}
 	adapters := map[entities.ExternalService]external.Adapter{
@@ -30,7 +39,7 @@ func Run() error {
 		entities.ExternalServiceGoodreads: external.BooksAdapter{},
 	}
 
-	userRepo := newMemoryUserRepo()
+	userRepo := repopostgres.NewUserRepo(db)
 	var interactionRepo stubInteractionRepo
 	var metadataRepo stubMetadataRepo
 
@@ -65,6 +74,7 @@ func Run() error {
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
 	h.Auth = authHandlers
+	h.Users = userRepo
 	router := httptransport.NewRouter(h)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)

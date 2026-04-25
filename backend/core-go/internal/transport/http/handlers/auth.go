@@ -12,6 +12,7 @@ type AuthHandlers struct {
 	Auth  *auth.Service
 	Users interface {
 		Create(user entities.User) (entities.User, error)
+		GetByID(userID string) (entities.User, error)
 	}
 }
 
@@ -29,6 +30,13 @@ type loginRequest struct {
 type tokenResponse struct {
 	Access  string `json:"access"`
 	Refresh string `json:"refresh"`
+}
+
+type userResponse struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
 }
 
 func (a *AuthHandlers) HandleRegister(w http.ResponseWriter, r *http.Request) {
