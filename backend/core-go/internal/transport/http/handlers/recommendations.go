@@ -136,8 +136,9 @@ func (h *Handlers) HandleUpdateInteraction(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "missing_item_id", "Missing item_id")
 		return
 	}
-	if req.Data.Rating < 0 || req.Data.Rating > 10 {
-		writeError(w, http.StatusBadRequest, "invalid_rating", "Rating must be 1..10")
+	// Rating is optional (0 means "unset"); when set, enforce 1..10.
+	if req.Data.Rating != 0 && (req.Data.Rating < 1 || req.Data.Rating > 10) {
+		writeError(w, http.StatusBadRequest, "invalid_rating", "Rating must be 1..10 or 0")
 		return
 	}
 	uid, ok := userIDFromContext(r.Context())
