@@ -14,3 +14,15 @@ The structure follows the design artifacts from `docs/predone` and keeps clear l
 - Use cases
 - Domain models/services
 - Infrastructure adapters
+
+## Database (local)
+
+Schema migrations live in `backend/db/migrations`.
+
+Local Postgres is provided via `backend/deployments/docker-compose.backend.yml` and applies
+`0001_init.sql` automatically on the first startup (via `docker-entrypoint-initdb.d`).
+
+Quick start:
+
+- Copy `backend/.env.example` to `backend/.env`
+- Run `backend/scripts/dev/db_up.sh`
