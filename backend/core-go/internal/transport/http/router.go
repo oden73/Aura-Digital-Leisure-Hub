@@ -15,6 +15,7 @@ func NewRouter(h *handlers.Handlers) http.Handler {
 	mux.HandleFunc("POST /v1/auth/login", h.Auth.HandleLogin)
 	mux.HandleFunc("POST /v1/recommendations", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetRecommendations))
 	mux.HandleFunc("GET /v1/search", h.HandleSearch)
+	mux.HandleFunc("GET /v1/content/{id}", h.HandleGetContent)
 	mux.HandleFunc("PUT /v1/interactions", handlers.Auth(h.Auth.Auth.Tokens, h.HandleUpdateInteraction))
 	mux.HandleFunc("GET /v1/library", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetLibrary))
 	mux.HandleFunc("POST /v1/sync/external", handlers.Auth(h.Auth.Auth.Tokens, h.HandleSyncExternal))

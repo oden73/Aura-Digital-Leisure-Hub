@@ -13,6 +13,7 @@ import (
 type Handlers struct {
 	GetRecommendations usecase.GetRecommendationsUseCase
 	Search             usecase.SearchContentUseCase
+	GetContent         usecase.GetContentUseCase
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
 	Library            usecase.ListLibraryUseCase
@@ -82,6 +83,21 @@ func (h *Handlers) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+// HandleGetContent serves GET /v1/content/{id}
+func (h *Handlers) HandleGetContent(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	it, err := h.GetContent.Execute(id)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, it)
 }
 
 type interactionRequest struct {
