@@ -4,6 +4,9 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -92,5 +95,55 @@ export const signInWithGoogle = async () => {
     throw error;
   }
 };
+
+export const signInWithEmail = async (email: string, password: string) => {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+};
+
+export const registerWithEmail = async (
+  email: string,
+  password: string,
+  displayName?: string,
+) => {
+  const result = await createUserWithEmailAndPassword(auth, email, password);
+  if (displayName) {
+    await updateProfile(result.user, { displayName });
+  }
+  return result.user;
+};
+
+/**
+ * Map Firebase auth error codes to user-friendly messages.
+ * Codes documented at https://firebase.google.com/docs/auth/admin/errors.
+ */
+export function describeAuthError(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code: string }).code;
+    switch (code) {
+      case 'auth/invalid-email':
+        return 'This email address looks invalid.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'Email or password is incorrect.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please try again later.';
+      case 'auth/email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'auth/weak-password':
+        return 'Password must be at least 6 characters.';
+      case 'auth/popup-closed-by-user':
+        return 'Sign-in popup was closed before completing.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection.';
+      default:
+        return 'Something went wrong. Please try again.';
+    }
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 export const logout = () => signOut(auth);
