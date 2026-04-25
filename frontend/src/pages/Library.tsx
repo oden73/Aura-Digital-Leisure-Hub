@@ -41,11 +41,12 @@ export default function LibraryPage() {
     filter === 'all' ? true : item.type === filter
   );
 
-  // Map library items back to full MediaItem data from MOCK_DATA for display
-  const displayItems = filteredItems.map(libItem => {
-    const fullItem = MOCK_DATA.find(m => m.id === libItem.itemId);
-    return fullItem ? { ...fullItem, libraryStatus: libItem.status } : null;
-  }).filter((i): i is MediaItem => i !== null);
+  // Map library items back to full MediaItem data from MOCK_DATA for display.
+  // libItem.status is intentionally not propagated yet — the UI does not
+  // expose per-item statuses (to-watch / watching / completed / dropped).
+  const displayItems = filteredItems
+    .map(libItem => MOCK_DATA.find(m => m.id === libItem.itemId) ?? null)
+    .filter((i): i is MediaItem => i !== null);
 
   if (!user) {
     return (
