@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"aura/backend/core-go/internal/domain/entities"
 	"aura/backend/core-go/internal/usecase"
@@ -68,7 +69,13 @@ func (h *Handlers) HandleGetRecommendations(w http.ResponseWriter, r *http.Reque
 
 // HandleSearch serves GET /v1/search?q=...
 func (h *Handlers) HandleSearch(w http.ResponseWriter, r *http.Request) {
-	query := usecase.SearchQuery{Text: r.URL.Query().Get("q")}
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	query := usecase.SearchQuery{Text: r.URL.Query().Get("q"), Limit: limit}
 	items, err := h.Search.Execute(query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

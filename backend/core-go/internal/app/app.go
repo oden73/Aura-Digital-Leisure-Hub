@@ -41,7 +41,7 @@ func Run() error {
 
 	userRepo := repopostgres.NewUserRepo(db)
 	interactionRepo := repopostgres.NewInteractionRepo(db)
-	var metadataRepo stubMetadataRepo
+	metadataRepo := repopostgres.NewMetadataRepo(db)
 
 	tokenMgr := auth.HMACTokenManager{
 		Secret:     []byte(cfg.JWTSecret),
