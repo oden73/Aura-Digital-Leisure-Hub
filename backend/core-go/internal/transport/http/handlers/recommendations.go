@@ -17,6 +17,7 @@ type Handlers struct {
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
 	Library            usecase.ListLibraryUseCase
+	LibraryItems       usecase.ListLibraryItemsUseCase
 	Auth               *AuthHandlers
 	Users              interface {
 		GetByID(userID string) (entities.User, error)
@@ -132,6 +133,27 @@ func (h *Handlers) HandleGetLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	items, err := h.Library.Execute(uid)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// HandleGetLibraryItems serves GET /v1/library/items.
+func (h *Handlers) HandleGetLibraryItems(w http.ResponseWriter, r *http.Request) {
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	items, err := h.LibraryItems.Execute(uid, limit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

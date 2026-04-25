@@ -71,6 +71,7 @@ func Run() error {
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	updateUC := usecase.NewUpdateInteraction(interactionRepo)
 	libraryUC := usecase.NewListLibrary(interactionRepo)
+	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
 	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo)
 
 	// HTTP transport.
@@ -79,6 +80,7 @@ func Run() error {
 	h.Users = userRepo
 	h.GetContent = getContentUC
 	h.Library = libraryUC
+	h.LibraryItems = libraryItemsUC
 	router := httptransport.NewRouter(h)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)

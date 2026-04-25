@@ -97,6 +97,14 @@ components:
         updated_at:
           type: string
           format: date-time
+    LibraryItem:
+      type: object
+      required: [interaction, item]
+      properties:
+        interaction:
+          $ref: "#/components/schemas/Interaction"
+        item:
+          $ref: "#/components/schemas/Item"
     UpdateInteractionRequest:
       type: object
       required: [item_id, data]
@@ -243,6 +251,27 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Interaction"
+        "401":
+          description: Unauthorized
+
+  /v1/library/items:
+    get:
+      summary: Get current user library with item metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Library items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LibraryItem"
         "401":
           description: Unauthorized
 
