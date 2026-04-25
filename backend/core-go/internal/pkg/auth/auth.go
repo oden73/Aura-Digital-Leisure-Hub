@@ -26,14 +26,28 @@ type TokenManager interface {
 // Service authenticates users and issues session tokens.
 type Service struct {
 	Tokens TokenManager
+	Users  interface {
+		GetByEmail(email string) (entities.User, error)
+	}
 }
 
 // New constructs an auth service.
-func New(tokens TokenManager) *Service { return &Service{Tokens: tokens} }
+func New(tokens TokenManager, users interface {
+	GetByEmail(email string) (entities.User, error)
+}) *Service {
+	return &Service{Tokens: tokens, Users: users}
+}
 
 // Authenticate verifies credentials and returns an access token.
-func (s *Service) Authenticate(_ Credentials) (Token, error) {
-	return Token{}, nil
+func (s *Service) Authenticate(c Credentials) (Token, error) {
+	u, err := s.Users.GetByEmail(c.Email)
+	if err != nil {
+		return Token{}, err
+	}
+	if err := ComparePassword(u.PasswordHash, c.Password); err != nil {
+		return Token{}, err
+	}
+	return s.Tokens.Generate(u.ID)
 }
 
 // ValidateToken resolves a token to a user.

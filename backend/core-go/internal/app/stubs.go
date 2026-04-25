@@ -6,14 +6,6 @@ import "aura/backend/core-go/internal/domain/entities"
 // They will be replaced by PostgreSQL-backed implementations once the driver
 // is wired in.
 
-type stubUserRepo struct{}
-
-func (stubUserRepo) GetByID(string) (entities.User, error) { return entities.User{}, nil }
-func (stubUserRepo) GetProfile(string) (entities.UserProfile, error) {
-	return entities.UserProfile{}, nil
-}
-func (stubUserRepo) LinkExternalAccount(entities.ExternalAccount) error { return nil }
-
 type stubInteractionRepo struct{}
 
 func (stubInteractionRepo) Save(entities.Interaction) error { return nil }

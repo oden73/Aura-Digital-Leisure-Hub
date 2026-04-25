@@ -4,7 +4,9 @@ import "aura/backend/core-go/internal/domain/entities"
 
 // UserRepository handles persistence of users and their external links.
 type UserRepository interface {
+	Create(user entities.User) (entities.User, error)
 	GetByID(userID string) (entities.User, error)
+	GetByEmail(email string) (entities.User, error)
 	GetProfile(userID string) (entities.UserProfile, error)
 	LinkExternalAccount(account entities.ExternalAccount) error
 }

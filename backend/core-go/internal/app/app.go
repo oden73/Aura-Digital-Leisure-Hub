@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"aura/backend/core-go/internal/config"
 	"aura/backend/core-go/internal/domain/entities"
@@ -10,6 +11,7 @@ import (
 	"aura/backend/core-go/internal/domain/services/hybrid"
 	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
 	"aura/backend/core-go/internal/infrastructure/external"
+	"aura/backend/core-go/internal/pkg/auth"
 	"aura/backend/core-go/internal/pkg/filter"
 	httptransport "aura/backend/core-go/internal/transport/http"
 	"aura/backend/core-go/internal/transport/http/handlers"
@@ -28,11 +30,18 @@ func Run() error {
 		entities.ExternalServiceGoodreads: external.BooksAdapter{},
 	}
 
-	// Repositories are interface-only in the skeleton; concrete implementations
-	// will be plugged in once the database driver is introduced.
-	var userRepo stubUserRepo
+	userRepo := newMemoryUserRepo()
 	var interactionRepo stubInteractionRepo
 	var metadataRepo stubMetadataRepo
+
+	tokenMgr := auth.HMACTokenManager{
+		Secret:     []byte(cfg.JWTSecret),
+		AccessTTL:  15 * time.Minute,
+		RefreshTTL: 30 * 24 * time.Hour,
+		Issuer:     "aura",
+	}
+	authSvc := auth.New(tokenMgr, userRepo)
+	authHandlers := &handlers.AuthHandlers{Auth: authSvc, Users: userRepo}
 
 	// Domain services.
 	cfCoordinator := cf.NewCoordinator(cf.User2UserRecommender{}, cf.Item2ItemRecommender{})
@@ -55,6 +64,7 @@ func Run() error {
 
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
+	h.Auth = authHandlers
 	router := httptransport.NewRouter(h)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)

@@ -14,6 +14,7 @@ type Handlers struct {
 	Search             usecase.SearchContentUseCase
 	UpdateInteraction  usecase.UpdateInteractionUseCase
 	SyncExternal       usecase.SyncExternalContentUseCase
+	Auth               *AuthHandlers
 }
 
 // New constructs an HTTP adapter around the use-case interfaces.
