@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
@@ -10,6 +11,7 @@ import { Library, LayoutGrid, List as ListIcon, Search } from 'lucide-react';
 
 export default function LibraryPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [libraryItems, setLibraryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'game' | 'book' | 'movie'>('all');
@@ -56,7 +58,7 @@ export default function LibraryPage() {
           Sign in to start building your personal collection of games, books, and movies.
         </p>
         <button 
-          onClick={() => window.location.href = '/login'}
+          onClick={() => navigate('/login')}
           className="bg-brand-500 hover:bg-brand-600 text-white font-bold px-8 py-4 rounded-2xl shadow-lg shadow-brand-500/20 transition-all"
         >
           Sign In Now
@@ -142,7 +144,8 @@ export default function LibraryPage() {
                     </span>
                   </div>
                   <button 
-                    onClick={() => window.location.href = `/content/${item.id}`}
+                    onClick={() => navigate(`/content/${item.id}`)}
+                    aria-label={`Open ${item.title}`}
                     className="p-3 rounded-xl bg-white/5 hover:bg-brand-500 hover:text-white transition-all"
                   >
                     <Search className="w-5 h-5" />
@@ -156,7 +159,7 @@ export default function LibraryPage() {
         <div className="text-center py-20 glass-panel rounded-3xl border-dashed border-white/10">
           <p className="text-slate-500 text-lg mb-4">Your library is empty.</p>
           <button 
-            onClick={() => window.location.href = '/'}
+            onClick={() => navigate('/')}
             className="text-brand-500 font-bold hover:underline"
           >
             Go discover something new
