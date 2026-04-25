@@ -13,6 +13,7 @@ import {
   doc,
   getDocFromServer,
 } from 'firebase/firestore';
+import { toast } from 'sonner';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -50,7 +51,25 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+/**
+ * Default user-visible messages per operation. Can be overridden by
+ * the caller via `userMessage` when context-specific copy is better.
+ */
+const DEFAULT_OP_MESSAGES: Record<OperationType, string> = {
+  [OperationType.CREATE]: "Couldn't save that just now. Please try again.",
+  [OperationType.UPDATE]: "Couldn't update that just now. Please try again.",
+  [OperationType.DELETE]: "Couldn't remove that just now. Please try again.",
+  [OperationType.WRITE]:  "Couldn't save that just now. Please try again.",
+  [OperationType.LIST]:   "Couldn't load that list. Please try again.",
+  [OperationType.GET]:    "Couldn't load that item. Please try again.",
+};
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+  userMessage?: string,
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -69,8 +88,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  // Keep the structured payload in the console for debugging, but show
+  // a short, friendly toast to the user instead of bubbling a giant
+  // JSON-encoded Error message up the React tree.
+  console.error('Firestore Error: ', errInfo);
+  toast.error(userMessage ?? DEFAULT_OP_MESSAGES[operationType]);
 }
 
 // Test Connection

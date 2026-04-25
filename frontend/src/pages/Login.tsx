@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, Mail, Lock, ArrowRight, Chrome } from 'lucide-react';
+import { toast } from 'sonner';
 import { signInWithGoogle, signInWithEmail, describeAuthError } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -30,10 +31,13 @@ export default function Login() {
     setError('');
     setSubmitting(true);
     try {
-      await signInWithGoogle();
+      const u = await signInWithGoogle();
+      toast.success(`Welcome back, ${u.displayName ?? 'friend'}!`);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(describeAuthError(err));
+      const message = describeAuthError(err);
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -44,10 +48,13 @@ export default function Login() {
     setError('');
     setSubmitting(true);
     try {
-      await signInWithEmail(email, password);
+      const u = await signInWithEmail(email, password);
+      toast.success(`Welcome back, ${u.displayName ?? u.email ?? 'friend'}!`);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(describeAuthError(err));
+      const message = describeAuthError(err);
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

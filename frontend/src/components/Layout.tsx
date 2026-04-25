@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { Sparkles, Info, User, LogIn, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { logout } from '../firebase';
 
@@ -11,8 +12,14 @@ export const Layout: React.FC = () => {
   const isAuthPage = ['/login', '/register'].includes(location.pathname);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+    try {
+      await logout();
+      toast.success('Signed out');
+      navigate('/login');
+    } catch (err) {
+      console.error('Logout error', err);
+      toast.error("Couldn't sign you out. Please try again.");
+    }
   };
 
   return (

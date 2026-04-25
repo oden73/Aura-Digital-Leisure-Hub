@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, Star, Gamepad2, Book, Film, Share2, Heart, ExternalLink, Plus, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { MOCK_DATA } from '../data';
 import { useAuth } from '../contexts/AuthContext';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -51,10 +52,12 @@ export default function ContentDetail() {
 
     setIsAdding(true);
     const libRef = doc(db, 'users', user.uid, 'library', item.id);
+    const wasInLibrary = isInLibrary;
 
     try {
-      if (isInLibrary) {
+      if (wasInLibrary) {
         await deleteDoc(libRef);
+        toast.success(`Removed “${item.title}” from your library`);
       } else {
         await setDoc(libRef, {
           itemId: item.id,
@@ -63,9 +66,17 @@ export default function ContentDetail() {
           addedAt: serverTimestamp(),
           status: 'to-watch'
         });
+        toast.success(`Added “${item.title}” to your library`);
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/library/${item.id}`);
+      handleFirestoreError(
+        error,
+        OperationType.WRITE,
+        `users/${user.uid}/library/${item.id}`,
+        wasInLibrary
+          ? `Couldn't remove “${item.title}” from your library.`
+          : `Couldn't add “${item.title}” to your library.`,
+      );
     } finally {
       setIsAdding(false);
     }

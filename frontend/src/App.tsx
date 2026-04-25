@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -30,6 +31,18 @@ export default function App() {
             </Route>
           </Routes>
         </Router>
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          richColors
+          closeButton
+          toastOptions={{
+            classNames: {
+              toast:
+                'glass-panel !bg-slate-900/90 !border-white/10 !text-slate-200',
+            },
+          }}
+        />
       </AuthProvider>
     </ErrorBoundary>
   );

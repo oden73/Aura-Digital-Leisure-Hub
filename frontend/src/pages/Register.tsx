@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, Mail, Lock, User, ArrowRight, Chrome } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   registerWithEmail,
   signInWithGoogle,
@@ -35,10 +36,13 @@ export default function Register() {
     setError('');
     setSubmitting(true);
     try {
-      await signInWithGoogle();
+      const u = await signInWithGoogle();
+      toast.success(`Welcome to Aura, ${u.displayName ?? 'friend'}!`);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(describeAuthError(err));
+      const message = describeAuthError(err);
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -48,15 +52,20 @@ export default function Register() {
     e.preventDefault();
     setError('');
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      const message = 'Password must be at least 6 characters.';
+      setError(message);
+      toast.error(message);
       return;
     }
     setSubmitting(true);
     try {
-      await registerWithEmail(email, password, name.trim() || undefined);
+      const u = await registerWithEmail(email, password, name.trim() || undefined);
+      toast.success(`Welcome to Aura, ${u.displayName ?? u.email ?? 'friend'}!`);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(describeAuthError(err));
+      const message = describeAuthError(err);
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
