@@ -14,6 +14,9 @@ cd "$ROOT_DIR/backend/deployments"
 
 docker compose --env-file "$ENV_FILE" -f docker-compose.backend.yml up -d postgres
 
+echo "Starting ChromaDB..."
+docker compose --env-file "$ENV_FILE" -f docker-compose.backend.yml up -d chroma
+
 echo "Waiting for Postgres to become healthy..."
 docker compose --env-file "$ENV_FILE" -f docker-compose.backend.yml ps
 

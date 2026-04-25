@@ -18,6 +18,18 @@ services:
       timeout: 3s
       retries: 30
 
+  chroma:
+    image: ghcr.io/chroma-core/chroma:latest
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/v1/heartbeat >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
   core-go:
     image: golang:1.22
     working_dir: /workspace/backend/core-go
@@ -30,6 +42,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
     depends_on:
       postgres:
+        condition: service_healthy
+      chroma:
         condition: service_healthy
 
   ai-engine-python:
@@ -45,6 +59,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      chroma:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  chroma_data:

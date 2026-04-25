@@ -22,6 +22,9 @@ Schema migrations live in `backend/db/migrations`.
 Local Postgres is provided via `backend/deployments/docker-compose.backend.yml` and applies
 `0001_init.sql` automatically on the first startup (via `docker-entrypoint-initdb.d`).
 
+Vector store is provided via ChromaDB (`chroma` service in the same compose). The relational
+database keeps only bookkeeping in `vector_store`; the embeddings live in ChromaDB.
+
 Quick start:
 
 - Copy `backend/.env.example` to `backend/.env`
