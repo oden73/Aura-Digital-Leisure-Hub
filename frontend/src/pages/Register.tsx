@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, Mail, Lock, User, ArrowRight, Chrome } from 'lucide-react';
 import {
   registerWithEmail,
@@ -9,6 +9,10 @@ import {
 } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 
+interface LocationState {
+  from?: { pathname: string };
+}
+
 export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -16,20 +20,23 @@ export default function Register() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const redirectTo = (location.state as LocationState | null)?.from?.pathname || '/';
 
   useEffect(() => {
     if (user) {
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, redirectTo]);
 
   const handleGoogleSignIn = async () => {
     setError('');
     setSubmitting(true);
     try {
       await signInWithGoogle();
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(describeAuthError(err));
     } finally {
@@ -47,7 +54,7 @@ export default function Register() {
     setSubmitting(true);
     try {
       await registerWithEmail(email, password, name.trim() || undefined);
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(describeAuthError(err));
     } finally {
