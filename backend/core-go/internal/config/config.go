@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,6 +26,11 @@ type Config struct {
 	// ShutdownTimeout caps how long the server waits for in-flight
 	// requests after receiving SIGINT/SIGTERM before forcing close.
 	ShutdownTimeout time.Duration
+
+	// CORSAllowedOrigins is the explicit allowlist of origins the API
+	// will respond to. Empty means "no CORS" (only same-origin clients
+	// can reach the API), the literal "*" entry means "any origin".
+	CORSAllowedOrigins []string
 }
 
 func Load() Config {
@@ -78,6 +84,15 @@ func Load() Config {
 		}
 	}
 
+	var corsOrigins []string
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		for _, o := range strings.Split(v, ",") {
+			if trimmed := strings.TrimSpace(o); trimmed != "" {
+				corsOrigins = append(corsOrigins, trimmed)
+			}
+		}
+	}
+
 	return Config{
 		HTTPHost:                      "0.0.0.0",
 		HTTPPort:                      port,
@@ -90,6 +105,7 @@ func Load() Config {
 		UserSimilarityCacheMaxEntries: userSimMax,
 		ItemSimilarityCacheMaxEntries: itemSimMax,
 		ShutdownTimeout:               shutdownTimeout,
+		CORSAllowedOrigins:            corsOrigins,
 	}
 }
 

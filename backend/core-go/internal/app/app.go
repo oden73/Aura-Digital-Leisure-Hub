@@ -131,11 +131,20 @@ func Run() error {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
-	router := httptransport.NewRouter(h, httptransport.RouterOptions{
+	routerOpts := httptransport.RouterOptions{
 		Logger:          logger,
 		MetricsHandler:  metricsRecorder.Handler(),
 		MetricsRecorder: metricsRecorder,
-	})
+	}
+	if len(cfg.CORSAllowedOrigins) > 0 {
+		routerOpts.CORS = &handlers.CORSConfig{
+			Origins:          cfg.CORSAllowedOrigins,
+			AllowCredentials: true,
+			ExposeHeaders:    []string{"X-Request-ID"},
+			MaxAgeSeconds:    600,
+		}
+	}
+	router := httptransport.NewRouter(h, routerOpts)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
 	// Conservative server-side timeouts. They are deliberately wider than

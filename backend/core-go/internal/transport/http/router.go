@@ -11,13 +11,14 @@ import (
 // the mux. Every field is optional: zero values disable the relevant
 // middleware so this package stays useful in tests.
 //
-// More observability hooks (CORS, rate limiting) are added incrementally
-// in subsequent changes; this struct grows with them.
+// More observability hooks (rate limiting) are added incrementally in
+// subsequent changes; this struct grows with them.
 type RouterOptions struct {
 	Logger          *slog.Logger
 	HealthCheck     http.HandlerFunc
 	MetricsHandler  http.Handler
 	MetricsRecorder handlers.MetricsRecorder
+	CORS            *handlers.CORSConfig
 }
 
 // NewRouter builds the HTTP router with all public endpoints. The
@@ -53,6 +54,9 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 
 	var chain http.Handler = mux
 	chain = handlers.Recover(chain)
+	if opts.CORS != nil {
+		chain = handlers.CORS(*opts.CORS)(chain)
+	}
 	if opts.MetricsRecorder != nil {
 		chain = handlers.Metrics(opts.MetricsRecorder)(chain)
 	}
