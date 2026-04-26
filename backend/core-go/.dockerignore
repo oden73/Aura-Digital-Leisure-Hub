@@ -1,0 +1,9 @@
+bin
+out
+*.log
+*.test
+*.out
+.cache
+.idea
+.vscode
+.git
