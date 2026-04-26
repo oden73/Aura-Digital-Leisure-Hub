@@ -31,6 +31,11 @@ type Config struct {
 	// will respond to. Empty means "no CORS" (only same-origin clients
 	// can reach the API), the literal "*" entry means "any origin".
 	CORSAllowedOrigins []string
+
+	// RateLimitRPS / RateLimitBurst configure the per-identity token
+	// bucket. RateLimitRPS == 0 disables rate limiting entirely.
+	RateLimitRPS   float64
+	RateLimitBurst float64
 }
 
 func Load() Config {
@@ -93,6 +98,9 @@ func Load() Config {
 		}
 	}
 
+	rps := envFloat("RATE_LIMIT_RPS", 20)
+	burst := envFloat("RATE_LIMIT_BURST", 40)
+
 	return Config{
 		HTTPHost:                      "0.0.0.0",
 		HTTPPort:                      port,
@@ -106,7 +114,18 @@ func Load() Config {
 		ItemSimilarityCacheMaxEntries: itemSimMax,
 		ShutdownTimeout:               shutdownTimeout,
 		CORSAllowedOrigins:            corsOrigins,
+		RateLimitRPS:                  rps,
+		RateLimitBurst:                burst,
 	}
+}
+
+func envFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 0 {
+			return f
+		}
+	}
+	return def
 }
 
 func envInt(key string, def int) int {

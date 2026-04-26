@@ -23,6 +23,7 @@ import (
 	"aura/backend/core-go/internal/pkg/filter"
 	"aura/backend/core-go/internal/pkg/logging"
 	"aura/backend/core-go/internal/pkg/metrics"
+	"aura/backend/core-go/internal/pkg/ratelimit"
 	"aura/backend/core-go/internal/pkg/simcache"
 	httptransport "aura/backend/core-go/internal/transport/http"
 	"aura/backend/core-go/internal/transport/http/handlers"
@@ -160,6 +161,20 @@ func Run() error {
 			MaxAgeSeconds:    600,
 		}
 	}
+
+	var limiter *ratelimit.Limiter
+	if cfg.RateLimitRPS > 0 {
+		// 5-minute idle window keeps memory bounded under churn (NAT'd
+		// users coming and going) without evicting genuinely active
+		// clients — at 20rps a single user touches their bucket far
+		// more often than once every 5 minutes.
+		limiter = ratelimit.New(cfg.RateLimitRPS, cfg.RateLimitBurst, 5*time.Minute)
+		routerOpts.RateLimit = &handlers.RateLimitConfig{
+			Limiter:   limiter,
+			SkipPaths: []string{"/health", "/livez", "/metrics"},
+		}
+	}
+
 	router := httptransport.NewRouter(h, routerOpts)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
@@ -195,6 +210,14 @@ func Run() error {
 		serveErr <- nil
 	}()
 
+	// Background sweeper for the rate-limit map so idle buckets are
+	// eventually freed; uses a context so it stops on shutdown.
+	sweeperCtx, stopSweeper := context.WithCancel(context.Background())
+	defer stopSweeper()
+	if limiter != nil {
+		go runRateLimitSweeper(sweeperCtx, limiter, time.Minute)
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
@@ -224,6 +247,22 @@ func Run() error {
 	}
 	logger.Info("shutdown_complete")
 	return nil
+}
+
+// runRateLimitSweeper periodically prunes idle buckets from the limiter
+// map so memory stays bounded across long-running deployments. It exits
+// when ctx is cancelled (driven by app shutdown).
+func runRateLimitSweeper(ctx context.Context, l *ratelimit.Limiter, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.Sweep()
+		}
+	}
 }
 
 // checkAIEngine probes the Python AI engine /health endpoint. We do this

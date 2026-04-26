@@ -23,6 +23,7 @@ type RouterOptions struct {
 	MetricsHandler  http.Handler
 	MetricsRecorder handlers.MetricsRecorder
 	CORS            *handlers.CORSConfig
+	RateLimit       *handlers.RateLimitConfig
 }
 
 // NewRouter builds the HTTP router with all public endpoints. The
@@ -61,6 +62,9 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 
 	var chain http.Handler = mux
 	chain = handlers.Recover(chain)
+	if opts.RateLimit != nil {
+		chain = handlers.RateLimit(*opts.RateLimit)(chain)
+	}
 	if opts.CORS != nil {
 		chain = handlers.CORS(*opts.CORS)(chain)
 	}
