@@ -21,20 +21,25 @@ func NewMetadataRepo(db *dbpostgres.Pool) *MetadataRepo { return &MetadataRepo{D
 // GetItem, SearchByText, TopRated, fetchBatch and GetUserLibraryItems so
 // every read produces the same column order. Media-specific details are
 // loaded separately via getBookDetails / getCinemaDetails / getGameDetails.
+//
+// Nullable text columns are COALESCEd to '' so the scanner can read into
+// plain Go strings; the two columns that callers actually need to
+// distinguish from "absent" (release_date, average_rating) stay nullable
+// and are scanned through pointers in scanBaseItem.
 const baseItemColumns = `
 	item_id,
 	title,
-	original_title,
-	description,
+	COALESCE(original_title, ''),
+	COALESCE(description, ''),
 	release_date,
-	cover_image_url,
+	COALESCE(cover_image_url, ''),
 	average_rating,
 	media_type,
-	genre,
-	setting,
-	themes,
-	tonality,
-	target_audience
+	COALESCE(genre, ''),
+	COALESCE(setting, ''),
+	COALESCE(themes, ''),
+	COALESCE(tonality, ''),
+	COALESCE(target_audience, '')
 `
 
 // scanBaseItem reads one base_items row into the provided Item using the
