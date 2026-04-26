@@ -30,6 +30,7 @@ type InteractionMatrix interface {
 	GetMeanRating(userID string) (float64, error)
 	GetVariance(userID string) (float64, error)
 	GetCommonUsers(itemI string, itemJ string) ([]string, error)
+	AllUsers() ([]string, error)
 }
 
 // UserStatisticsRepository provides aggregates used by the predictors.
