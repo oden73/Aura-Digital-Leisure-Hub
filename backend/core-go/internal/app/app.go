@@ -81,7 +81,7 @@ func Run() error {
 		WithMetadata(metadataRepo)
 
 	// Cross-cutting services.
-	filterSvc := filter.New()
+	filterSvc := filter.New().WithMetadata(metadataRepo)
 
 	// Use cases.
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc)
