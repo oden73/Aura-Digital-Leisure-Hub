@@ -1,4 +1,13 @@
-version: "3.9"
+# Local-development stack for the Aura backend.
+#
+# Brings up Postgres + ChromaDB + Go core + Python AI engine. The
+# `migrate` service applies SQL migrations once at startup and exits;
+# the API is gated on it via depends_on/condition: service_completed_successfully.
+#
+# Usage:
+#   cd backend
+#   cp .env.example .env
+#   docker compose -f deployments/docker-compose.backend.yml up --build
 
 services:
   postgres:
@@ -11,7 +20,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -30,32 +38,67 @@ services:
       timeout: 3s
       retries: 30
 
-  core-go:
-    image: golang:1.22
-    working_dir: /workspace/backend/core-go
-    command: go run ./cmd/api
-    ports:
-      - "8080:8080"
-    volumes:
-      - ../../:/workspace
+  # One-shot migration runner. Compose treats this as a "task" service:
+  # it builds the same image as core-go (the migrate binary lives
+  # inside it), runs `migrate up`, and exits. The api/ai-engine wait
+  # for it to complete successfully via depends_on.
+  migrate:
+    build:
+      context: ..
+      dockerfile: core-go/Dockerfile
+    image: aura-core-go:dev
+    entrypoint: ["migrate", "--dir=/app/migrations", "up"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
     depends_on:
       postgres:
         condition: service_healthy
-      chroma:
-        condition: service_healthy
+    restart: "no"
 
-  ai-engine-python:
-    image: python:3.12-slim
-    working_dir: /workspace/backend/ai-engine-python
-    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8090"
+  core-go:
+    build:
+      context: ..
+      dockerfile: core-go/Dockerfile
+    image: aura-core-go:dev
     ports:
-      - "8090:8090"
-    volumes:
-      - ../../:/workspace
+      - "${CORE_GO_PORT:-8080}:8080"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai-engine:8090}
+      AI_ENGINE_TIMEOUT_MS: ${AI_ENGINE_TIMEOUT_MS:-2000}
+      APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-20}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-40}
+      SHUTDOWN_TIMEOUT_SECONDS: ${SHUTDOWN_TIMEOUT_SECONDS:-15}
+      SIMILARITY_CACHE_TTL_SECONDS: ${SIMILARITY_CACHE_TTL_SECONDS:-1800}
+      USER_SIMILARITY_CACHE_MAX: ${USER_SIMILARITY_CACHE_MAX:-100000}
+      ITEM_SIMILARITY_CACHE_MAX: ${ITEM_SIMILARITY_CACHE_MAX:-50000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ai-engine:
+        condition: service_started
+
+  ai-engine:
+    build:
+      context: ../ai-engine-python
+      dockerfile: Dockerfile
+    image: aura-ai-engine:dev
+    ports:
+      - "${AI_ENGINE_PORT:-8090}:8090"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
+      CHROMA_URL: ${CHROMA_URL:-http://chroma:8000}
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-aura-items}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      AI_ENGINE_HOST: 0.0.0.0
+      AI_ENGINE_PORT: "8090"
+      HF_HOME: /data/hf-cache
+    volumes:
+      - hf_cache:/data/hf-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,3 +108,4 @@ services:
 volumes:
   postgres_data:
   chroma_data:
+  hf_cache:

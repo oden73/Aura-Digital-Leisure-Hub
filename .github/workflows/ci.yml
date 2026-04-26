@@ -1,0 +1,132 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [main, master, "feat/**", "fix/**", "chore/**"]
+  pull_request:
+    branches: [main, master]
+
+# Cancel superseded runs of the same ref to keep CI snappy.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-core:
+    name: Go core (vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/core-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/core-go/go.mod
+          cache: true
+          cache-dependency-path: backend/core-go/go.sum
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1 -race -timeout=120s
+
+      - name: Build CLIs
+        run: |
+          go build ./cmd/api
+          go build ./cmd/migrate
+          go build ./cmd/backfill-embeddings
+
+  go-integration:
+    name: Go core (integration + e2e)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/core-go
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aura
+          POSTGRES_PASSWORD: aura
+          POSTGRES_DB: aura_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aura -d aura_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      INTEGRATION_DATABASE_URL: postgres://aura:aura@127.0.0.1:5432/aura_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/core-go/go.mod
+          cache: true
+          cache-dependency-path: backend/core-go/go.sum
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U aura -d aura_test >/dev/null 2>&1; then
+              echo "Postgres is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"; exit 1
+
+      - name: Repository integration tests
+        run: go test -tags=integration ./internal/infrastructure/repository/postgres/... -count=1 -timeout=180s
+
+      - name: End-to-end API tests
+        run: go test -tags=e2e ./internal/e2e/... -count=1 -timeout=180s
+
+  ai-engine:
+    name: AI engine (unittest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/ai-engine-python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/ai-engine-python/requirements.txt
+
+      # The default-import path of `tests/test_content_similarity.py`
+      # only relies on numpy + the pure-Python content-similarity
+      # service, so we install the trimmed deps that are sufficient
+      # for the unit suite. The full requirements.txt is only needed
+      # for a live FastAPI run (sentence-transformers, chromadb, …).
+      - name: Install minimal test deps
+        run: pip install --upgrade pip numpy
+
+      - name: Run unittest
+        run: python -m unittest discover -v -s tests
+
+  docker-compose:
+    name: Compose lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose schema
+        working-directory: backend
+        run: docker compose -f deployments/docker-compose.backend.yml config --quiet

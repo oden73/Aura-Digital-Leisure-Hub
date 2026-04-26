@@ -82,6 +82,9 @@ func (r *InteractionRepo) GetUserLibraryItems(userID string, limit int) ([]Libra
 		limit = 50
 	}
 
+	// Nullable text columns must be COALESCEd to '' for the same
+	// reason scanBaseItem does it: callers Scan into plain Go strings
+	// and pgx refuses to map NULL into them.
 	rows, err := r.DB.Query(ctx, `
 		SELECT
 			ui.interaction_id,
@@ -95,17 +98,17 @@ func (r *InteractionRepo) GetUserLibraryItems(userID string, limit int) ([]Libra
 
 			bi.item_id,
 			bi.title,
-			bi.original_title,
-			bi.description,
+			COALESCE(bi.original_title, ''),
+			COALESCE(bi.description, ''),
 			bi.release_date,
-			bi.cover_image_url,
+			COALESCE(bi.cover_image_url, ''),
 			bi.average_rating,
 			bi.media_type,
-			bi.genre,
-			bi.setting,
-			bi.themes,
-			bi.tonality,
-			bi.target_audience
+			COALESCE(bi.genre, ''),
+			COALESCE(bi.setting, ''),
+			COALESCE(bi.themes, ''),
+			COALESCE(bi.tonality, ''),
+			COALESCE(bi.target_audience, '')
 		FROM user_interactions ui
 		JOIN base_items bi ON bi.item_id = ui.item_id
 		WHERE ui.user_id = $1

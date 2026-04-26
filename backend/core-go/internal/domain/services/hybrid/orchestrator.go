@@ -32,6 +32,14 @@ type MetadataLookup interface {
 	GetItem(itemID string) (entities.Item, error)
 }
 
+// ProfileLookup is an optional dependency used by the orchestrator to
+// inject the user's preference profile into the RankingContext. The
+// profile feeds preference-aware ranking rules without each rule having
+// to query the database.
+type ProfileLookup interface {
+	GetProfile(userID string) (entities.UserProfile, error)
+}
+
 // DefaultOrchestrator wires the CF coordinator, AI engine client, aggregator
 // and ranker.
 type DefaultOrchestrator struct {
@@ -40,6 +48,7 @@ type DefaultOrchestrator struct {
 	Aggregator *ScoreAggregator
 	Ranker     *FinalRanker
 	Metadata   MetadataLookup
+	Profiles   ProfileLookup
 }
 
 // NewOrchestrator constructs the orchestrator.
@@ -60,6 +69,13 @@ func NewOrchestrator(
 // WithMetadata attaches a metadata lookup used to enrich the ranking context.
 func (o *DefaultOrchestrator) WithMetadata(m MetadataLookup) *DefaultOrchestrator {
 	o.Metadata = m
+	return o
+}
+
+// WithProfiles attaches a profile lookup used to enrich the ranking
+// context with the caller's preference profile.
+func (o *DefaultOrchestrator) WithProfiles(p ProfileLookup) *DefaultOrchestrator {
+	o.Profiles = p
 	return o
 }
 
@@ -89,6 +105,11 @@ func (o *DefaultOrchestrator) GetHybridRecommendations(
 	ctx := RankingContext{
 		CurrentDate: time.Now(),
 		TargetCount: k,
+	}
+	if o.Profiles != nil {
+		if profile, err := o.Profiles.GetProfile(userID); err == nil {
+			ctx.UserProfile = profile
+		}
 	}
 	if o.Metadata != nil {
 		ctx.ItemMeta = make(map[string]entities.Item, len(aggregated))
