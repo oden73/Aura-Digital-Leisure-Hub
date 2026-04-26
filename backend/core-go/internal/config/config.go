@@ -3,13 +3,16 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 type Config struct {
-	HTTPHost string
-	HTTPPort int
-	DatabaseURL string
-	JWTSecret   string
+	HTTPHost        string
+	HTTPPort        int
+	DatabaseURL     string
+	JWTSecret       string
+	AIEngineURL     string
+	AIEngineTimeout time.Duration
 }
 
 func Load() Config {
@@ -30,10 +33,24 @@ func Load() Config {
 		jwtSecret = "dev-secret"
 	}
 
+	aiURL := os.Getenv("AI_ENGINE_URL")
+	if aiURL == "" {
+		aiURL = "http://localhost:8000"
+	}
+
+	aiTimeout := 2 * time.Second
+	if v := os.Getenv("AI_ENGINE_TIMEOUT_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			aiTimeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+
 	return Config{
-		HTTPHost: "0.0.0.0",
-		HTTPPort: port,
-		DatabaseURL: dbURL,
-		JWTSecret:   jwtSecret,
+		HTTPHost:        "0.0.0.0",
+		HTTPPort:        port,
+		DatabaseURL:     dbURL,
+		JWTSecret:       jwtSecret,
+		AIEngineURL:     aiURL,
+		AIEngineTimeout: aiTimeout,
 	}
 }

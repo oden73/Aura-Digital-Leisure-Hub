@@ -15,7 +15,21 @@ type Orchestrator interface {
 		userID string,
 		k int,
 		filters entities.RecommendationFilters,
-	) ([]entities.ScoredItem, error)
+	) (Result, error)
+}
+
+// Result is the orchestrator output: ranked items plus optional reasoning
+// produced upstream by the AI engine.
+type Result struct {
+	Items     []entities.ScoredItem
+	Reasoning string
+}
+
+// MetadataLookup is an optional dependency used by the orchestrator to
+// hydrate the RankingContext so that ranking rules can reason about catalog
+// metadata (genre, release date, average rating).
+type MetadataLookup interface {
+	GetItem(itemID string) (entities.Item, error)
 }
 
 // DefaultOrchestrator wires the CF coordinator, AI engine client, aggregator
@@ -25,6 +39,7 @@ type DefaultOrchestrator struct {
 	AIEngine   ai_engine.Client
 	Aggregator *ScoreAggregator
 	Ranker     *FinalRanker
+	Metadata   MetadataLookup
 }
 
 // NewOrchestrator constructs the orchestrator.
@@ -42,30 +57,50 @@ func NewOrchestrator(
 	}
 }
 
+// WithMetadata attaches a metadata lookup used to enrich the ranking context.
+func (o *DefaultOrchestrator) WithMetadata(m MetadataLookup) *DefaultOrchestrator {
+	o.Metadata = m
+	return o
+}
+
 // GetHybridRecommendations returns a ranked list for the given user.
 func (o *DefaultOrchestrator) GetHybridRecommendations(
 	userID string,
 	k int,
 	filters entities.RecommendationFilters,
-) ([]entities.ScoredItem, error) {
-	_ = filters
-
+) (Result, error) {
 	cfScores, err := o.CFModule.GetRecommendations(userID, k)
 	if err != nil {
-		return nil, err
+		return Result{}, err
 	}
 
-	cbScores, err := o.AIEngine.ComputeCBScores(userID, nil, k)
+	cbResp, err := o.AIEngine.ComputeCB(ai_engine.Request{
+		UserID:     userID,
+		Limit:      k,
+		MediaTypes: filters.MediaTypes,
+	})
 	if err != nil {
-		return nil, err
+		// AI engine is best-effort: degrade gracefully if it is unavailable.
+		cbResp = ai_engine.Response{}
 	}
 
-	aggregated := o.Aggregator.AggregateScores(cfScores, cbScores)
+	aggregated := o.Aggregator.AggregateScores(cfScores, cbResp.Items)
 
 	ctx := RankingContext{
 		CurrentDate: time.Now(),
 		TargetCount: k,
 	}
+	if o.Metadata != nil {
+		ctx.ItemMeta = make(map[string]entities.Item, len(aggregated))
+		for _, it := range aggregated {
+			meta, err := o.Metadata.GetItem(it.ItemID)
+			if err != nil {
+				continue
+			}
+			ctx.ItemMeta[it.ItemID] = meta
+		}
+	}
+
 	ranked := o.Ranker.Rank(aggregated, ctx)
-	return ranked, nil
+	return Result{Items: ranked, Reasoning: cbResp.Reasoning}, nil
 }

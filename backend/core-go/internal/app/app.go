@@ -32,7 +32,7 @@ func Run() error {
 	defer db.Close()
 
 	// Infrastructure clients / adapters.
-	aiClient := ai_engine.StubClient{}
+	var aiClient ai_engine.Client = ai_engine.NewHTTPClient(cfg.AIEngineURL, cfg.AIEngineTimeout)
 	adapters := map[entities.ExternalService]external.Adapter{
 		entities.ExternalServiceSteam:     external.SteamAdapter{},
 		entities.ExternalServiceKinopoisk: external.TMDBAdapter{},
@@ -60,13 +60,14 @@ func Run() error {
 		hybrid.RecencyBoostRule{DecayFactor: 0.1},
 		hybrid.PopularityBalanceRule{},
 	)
-	orchestrator := hybrid.NewOrchestrator(cfCoordinator, aiClient, aggregator, ranker)
+	orchestrator := hybrid.NewOrchestrator(cfCoordinator, aiClient, aggregator, ranker).
+		WithMetadata(metadataRepo)
 
 	// Cross-cutting services.
 	filterSvc := filter.New()
 
 	// Use cases.
-	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, filterSvc)
+	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	upsertContentUC := usecase.NewUpsertContent(metadataRepo)

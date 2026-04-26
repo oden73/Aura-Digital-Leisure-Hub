@@ -12,6 +12,7 @@ import (
 type GetRecommendations struct {
 	HybridRanker hybrid.Orchestrator
 	UserRepo     postgres.UserRepository
+	Metadata     postgres.MetadataRepository
 	Filter       *filter.Service
 }
 
@@ -19,11 +20,13 @@ type GetRecommendations struct {
 func NewGetRecommendations(
 	ranker hybrid.Orchestrator,
 	userRepo postgres.UserRepository,
+	metadata postgres.MetadataRepository,
 	filterSvc *filter.Service,
 ) *GetRecommendations {
 	return &GetRecommendations{
 		HybridRanker: ranker,
 		UserRepo:     userRepo,
+		Metadata:     metadata,
 		Filter:       filterSvc,
 	}
 }
@@ -35,21 +38,32 @@ func (u *GetRecommendations) Execute(
 ) (RecommendationResponse, error) {
 	const defaultLimit = 20
 
-	scored, err := u.HybridRanker.GetHybridRecommendations(userID, defaultLimit, filters)
+	res, err := u.HybridRanker.GetHybridRecommendations(userID, defaultLimit, filters)
 	if err != nil {
 		return RecommendationResponse{}, err
 	}
-	scored = u.Filter.Apply(scored, filters)
+
+	scored := u.Filter.Apply(res.Items, filters)
 
 	items := make([]RecommendationItem, 0, len(scored))
 	for _, s := range scored {
-		items = append(items, RecommendationItem{
+		ri := RecommendationItem{
 			ItemID: s.ItemID,
 			Score:  s.Score,
-		})
+		}
+		if u.Metadata != nil {
+			if meta, err := u.Metadata.GetItem(s.ItemID); err == nil {
+				ri.Title = meta.Title
+			}
+		}
+		if reason, ok := s.Metadata["match_reason"].(string); ok {
+			ri.MatchReason = reason
+		}
+		items = append(items, ri)
 	}
 	return RecommendationResponse{
-		Items:    items,
-		Metadata: map[string]any{"user_id": userID},
+		Items:     items,
+		Reasoning: res.Reasoning,
+		Metadata:  map[string]any{"user_id": userID},
 	}, nil
 }
