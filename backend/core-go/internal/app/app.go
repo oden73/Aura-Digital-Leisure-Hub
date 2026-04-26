@@ -2,8 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"aura/backend/core-go/internal/config"
@@ -134,5 +138,65 @@ func Run() error {
 	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
-	return http.ListenAndServe(addr, router)
+	// Conservative server-side timeouts. They are deliberately wider than
+	// the AI engine timeout (cfg.AIEngineTimeout, ~2s by default) plus
+	// database round-trip headroom — we want slow clients to be cut off
+	// without breaking legitimate end-to-end recommendation calls.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	// Shut down on SIGINT/SIGTERM so Kubernetes / docker stop / Ctrl-C
+	// give in-flight requests a chance to finish before we close the
+	// database pool. A hard timeout caps how long we are willing to
+	// wait so deployments don't hang on stuck connections.
+	shutdownTimeout := cfg.ShutdownTimeout
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = 15 * time.Second
+	}
+
+	serveErr := make(chan error, 1)
+	go func() {
+		logger.Info("http_listen", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+			return
+		}
+		serveErr <- nil
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case sig := <-stop:
+		logger.Info("shutdown_signal", "signal", sig.String(), "timeout", shutdownTimeout.String())
+	case err := <-serveErr:
+		if err != nil {
+			logger.Error("http_listen_failed", "error", err)
+			return err
+		}
+		// ListenAndServe returned with a clean ErrServerClosed before any
+		// signal — unusual, treat it as a normal shutdown.
+		return nil
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("http_shutdown_failed", "error", err)
+		_ = srv.Close()
+		return err
+	}
+	// Wait for ListenAndServe to actually return before reporting success.
+	if err := <-serveErr; err != nil {
+		return err
+	}
+	logger.Info("shutdown_complete")
+	return nil
 }

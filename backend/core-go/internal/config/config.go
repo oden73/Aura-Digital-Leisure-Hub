@@ -21,6 +21,10 @@ type Config struct {
 	SimilarityCacheTTL            time.Duration
 	UserSimilarityCacheMaxEntries int
 	ItemSimilarityCacheMaxEntries int
+
+	// ShutdownTimeout caps how long the server waits for in-flight
+	// requests after receiving SIGINT/SIGTERM before forcing close.
+	ShutdownTimeout time.Duration
 }
 
 func Load() Config {
@@ -67,6 +71,13 @@ func Load() Config {
 		env = "development"
 	}
 
+	shutdownTimeout := 15 * time.Second
+	if v := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); v != "" {
+		if s, err := strconv.Atoi(v); err == nil && s > 0 {
+			shutdownTimeout = time.Duration(s) * time.Second
+		}
+	}
+
 	return Config{
 		HTTPHost:                      "0.0.0.0",
 		HTTPPort:                      port,
@@ -78,6 +89,7 @@ func Load() Config {
 		SimilarityCacheTTL:            simTTL,
 		UserSimilarityCacheMaxEntries: userSimMax,
 		ItemSimilarityCacheMaxEntries: itemSimMax,
+		ShutdownTimeout:               shutdownTimeout,
 	}
 }
 
