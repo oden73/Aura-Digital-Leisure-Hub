@@ -135,6 +135,96 @@ func (r *MetadataRepo) SaveItem(item entities.Item) error {
 	return err
 }
 
+// IterateAll streams every item in the catalog through the visitor callback.
+// It is intentionally batched so memory usage stays flat even for very large
+// catalogs. If the visitor returns an error iteration stops and that error
+// is returned. Used by the embeddings backfill CLI.
+func (r *MetadataRepo) IterateAll(ctx context.Context, batchSize int, visit func(entities.Item) error) error {
+	if batchSize <= 0 {
+		batchSize = 200
+	}
+
+	cursor := ""
+	for {
+		items, err := r.fetchBatch(ctx, cursor, batchSize)
+		if err != nil {
+			return err
+		}
+		if len(items) == 0 {
+			return nil
+		}
+		for _, it := range items {
+			if err := visit(it); err != nil {
+				return err
+			}
+		}
+		cursor = items[len(items)-1].ID
+		if len(items) < batchSize {
+			return nil
+		}
+	}
+}
+
+func (r *MetadataRepo) fetchBatch(ctx context.Context, cursor string, limit int) ([]entities.Item, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	rows, err := r.DB.Query(queryCtx, `
+		SELECT
+			item_id,
+			title,
+			original_title,
+			description,
+			release_date,
+			cover_image_url,
+			average_rating,
+			media_type,
+			genre,
+			setting,
+			themes,
+			tonality,
+			target_audience
+		FROM base_items
+		WHERE ($1 = '' OR item_id::text > $1)
+		ORDER BY item_id::text ASC
+		LIMIT $2
+	`, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []entities.Item
+	for rows.Next() {
+		var it entities.Item
+		var releaseDate *time.Time
+		var avgRating *float64
+		if err := rows.Scan(
+			&it.ID,
+			&it.Title,
+			&it.OriginalTitle,
+			&it.Description,
+			&releaseDate,
+			&it.CoverImageURL,
+			&avgRating,
+			&it.MediaType,
+			&it.Criteria.Genre,
+			&it.Criteria.Setting,
+			&it.Criteria.Themes,
+			&it.Criteria.Tonality,
+			&it.Criteria.TargetAudience,
+		); err != nil {
+			return nil, err
+		}
+		it.ReleaseDate = releaseDate
+		if avgRating != nil {
+			it.AverageRating = *avgRating
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
 func (r *MetadataRepo) SearchByText(query string, limit int) ([]entities.Item, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

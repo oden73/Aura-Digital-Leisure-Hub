@@ -9,6 +9,7 @@ import (
 	"aura/backend/core-go/internal/config"
 	"aura/backend/core-go/internal/domain/entities"
 	"aura/backend/core-go/internal/domain/services/cf"
+	"aura/backend/core-go/internal/domain/services/embeddings"
 	"aura/backend/core-go/internal/domain/services/hybrid"
 	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
 	dbpostgres "aura/backend/core-go/internal/infrastructure/db/postgres"
@@ -33,6 +34,7 @@ func Run() error {
 
 	// Infrastructure clients / adapters.
 	var aiClient ai_engine.Client = ai_engine.NewHTTPClient(cfg.AIEngineURL, cfg.AIEngineTimeout)
+	embeddingPublisher := embeddings.New(aiClient)
 	adapters := map[entities.ExternalService]external.Adapter{
 		entities.ExternalServiceSteam:     external.SteamAdapter{},
 		entities.ExternalServiceKinopoisk: external.TMDBAdapter{},
@@ -87,11 +89,11 @@ func Run() error {
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
-	upsertContentUC := usecase.NewUpsertContent(metadataRepo)
+	upsertContentUC := usecase.NewUpsertContent(metadataRepo, embeddingPublisher)
 	updateUC := usecase.NewUpdateInteraction(interactionRepo)
 	libraryUC := usecase.NewListLibrary(interactionRepo)
 	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
-	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo)
+	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo, embeddingPublisher)
 
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
