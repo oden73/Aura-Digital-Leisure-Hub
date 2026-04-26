@@ -14,7 +14,11 @@ import (
 // More observability hooks (rate limiting) are added incrementally in
 // subsequent changes; this struct grows with them.
 type RouterOptions struct {
-	Logger          *slog.Logger
+	Logger *slog.Logger
+	// HealthCheck is the content-aware /health endpoint (DB, AI engine,
+	// …). Falls back to a static 200 when nil. /livez is always wired
+	// to the static handler so liveness probes never depend on data
+	// stores.
 	HealthCheck     http.HandlerFunc
 	MetricsHandler  http.Handler
 	MetricsRecorder handlers.MetricsRecorder
@@ -35,6 +39,9 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 		healthFn = opts.HealthCheck
 	}
 	mux.HandleFunc("GET /health", healthFn)
+	// /livez is unconditional: only for liveness probes. Readiness probes
+	// should target /health, which actually exercises dependencies.
+	mux.HandleFunc("GET /livez", handlers.Health)
 	if opts.MetricsHandler != nil {
 		mux.Handle("GET /metrics", opts.MetricsHandler)
 	}

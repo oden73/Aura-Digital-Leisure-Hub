@@ -131,8 +131,24 @@ func Run() error {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
+	healthHandler := handlers.HealthHandler(2*time.Second,
+		handlers.CheckerFunc{
+			NameValue: "database",
+			Fn: func(ctx context.Context) error {
+				return db.Ping(ctx)
+			},
+		},
+		handlers.CheckerFunc{
+			NameValue: "ai_engine",
+			Fn: func(ctx context.Context) error {
+				return checkAIEngine(ctx, cfg.AIEngineURL, cfg.AIEngineTimeout)
+			},
+		},
+	)
+
 	routerOpts := httptransport.RouterOptions{
 		Logger:          logger,
+		HealthCheck:     healthHandler,
 		MetricsHandler:  metricsRecorder.Handler(),
 		MetricsRecorder: metricsRecorder,
 	}
@@ -207,5 +223,34 @@ func Run() error {
 		return err
 	}
 	logger.Info("shutdown_complete")
+	return nil
+}
+
+// checkAIEngine probes the Python AI engine /health endpoint. We do this
+// inline (instead of adding it to ai_engine.Client) because the health
+// check intentionally bypasses the request metrics and TLS-aware
+// transport — it's a reachability test, not a real call.
+func checkAIEngine(ctx context.Context, baseURL string, timeout time.Duration) error {
+	if baseURL == "" {
+		return errors.New("ai engine url not configured")
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, baseURL+"/health", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("ai engine: status=%d", resp.StatusCode)
+	}
 	return nil
 }
