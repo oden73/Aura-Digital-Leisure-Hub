@@ -11,11 +11,13 @@ import (
 // the mux. Every field is optional: zero values disable the relevant
 // middleware so this package stays useful in tests.
 //
-// More observability hooks (Prometheus metrics, CORS, rate limiting) are
-// added incrementally in subsequent changes; this struct grows with them.
+// More observability hooks (CORS, rate limiting) are added incrementally
+// in subsequent changes; this struct grows with them.
 type RouterOptions struct {
-	Logger      *slog.Logger
-	HealthCheck http.HandlerFunc
+	Logger          *slog.Logger
+	HealthCheck     http.HandlerFunc
+	MetricsHandler  http.Handler
+	MetricsRecorder handlers.MetricsRecorder
 }
 
 // NewRouter builds the HTTP router with all public endpoints. The
@@ -32,6 +34,9 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 		healthFn = opts.HealthCheck
 	}
 	mux.HandleFunc("GET /health", healthFn)
+	if opts.MetricsHandler != nil {
+		mux.Handle("GET /metrics", opts.MetricsHandler)
+	}
 	mux.HandleFunc("POST /v1/auth/register", h.Auth.HandleRegister)
 	mux.HandleFunc("POST /v1/auth/login", h.Auth.HandleLogin)
 	mux.HandleFunc("POST /v1/auth/refresh", h.Auth.HandleRefresh)
@@ -48,6 +53,9 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 
 	var chain http.Handler = mux
 	chain = handlers.Recover(chain)
+	if opts.MetricsRecorder != nil {
+		chain = handlers.Metrics(opts.MetricsRecorder)(chain)
+	}
 	chain = handlers.AccessLog(opts.Logger)(chain)
 	chain = handlers.RequestID(chain)
 	return chain

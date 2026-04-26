@@ -13,11 +13,19 @@ import (
 	"aura/backend/core-go/internal/domain/entities"
 )
 
+// CallMetrics is the slice of the metrics surface this client touches.
+// Defining it locally lets the package stay metrics-agnostic — production
+// wires metrics.Recorder, tests pass nil.
+type CallMetrics interface {
+	IncAIEngineCall(operation string, success bool)
+}
+
 // HTTPClient is a thin REST client for the Python AI engine described in
 // docs/predone/diagrams/sequence_diagram.puml (CB scores, LLM reasoning).
 type HTTPClient struct {
 	BaseURL string
 	HTTP    *http.Client
+	Metrics CallMetrics // optional
 }
 
 // NewHTTPClient constructs an HTTP client with sensible defaults. baseURL
@@ -29,6 +37,18 @@ func NewHTTPClient(baseURL string, timeout time.Duration) *HTTPClient {
 	return &HTTPClient{
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		HTTP:    &http.Client{Timeout: timeout},
+	}
+}
+
+// WithMetrics enables Prometheus instrumentation for AI engine calls.
+func (c *HTTPClient) WithMetrics(m CallMetrics) *HTTPClient {
+	c.Metrics = m
+	return c
+}
+
+func (c *HTTPClient) recordCall(op string, err error) {
+	if c.Metrics != nil {
+		c.Metrics.IncAIEngineCall(op, err == nil)
 	}
 }
 
@@ -53,6 +73,12 @@ type cbResponsePayload struct {
 
 // ComputeCB performs POST /v1/recommendations/cb against the AI engine.
 func (c *HTTPClient) ComputeCB(req Request) (Response, error) {
+	out, err := c.computeCB(req)
+	c.recordCall("compute_cb", err)
+	return out, err
+}
+
+func (c *HTTPClient) computeCB(req Request) (Response, error) {
 	payload := cbRequestPayload{
 		UserID:       req.UserID,
 		CandidateIDs: req.CandidateIDs,
@@ -130,6 +156,12 @@ type embeddingRequestPayload struct {
 // upserting into the vector store. The response body is intentionally
 // discarded — Go core only cares that the embedding was persisted.
 func (c *HTTPClient) GenerateEmbedding(req EmbeddingRequest) error {
+	err := c.generateEmbedding(req)
+	c.recordCall("generate_embedding", err)
+	return err
+}
+
+func (c *HTTPClient) generateEmbedding(req EmbeddingRequest) error {
 	if req.ItemID == "" || req.Text == "" {
 		return fmt.Errorf("ai engine: item_id and text are required")
 	}

@@ -14,6 +14,14 @@ const (
 	matchReasonPopular         = "popular pick"
 )
 
+// RecommendationMetrics is the slice of the metrics surface this use case
+// touches. Defining it locally keeps the usecase package independent of
+// the metrics implementation; production code wires
+// metrics.Recorder, tests typically pass nil or metrics.NoOp.
+type RecommendationMetrics interface {
+	IncRecommendationRequest(strategy string, coldStart bool)
+}
+
 // PopularityRepository returns the highest-rated catalog items, optionally
 // restricted by media type. Used by the cold-start fallback to backfill the
 // response when CF and CB produced too few candidates.
@@ -32,6 +40,7 @@ type GetRecommendations struct {
 	Metadata     postgres.MetadataRepository
 	Filter       *filter.Service
 	Popularity   PopularityRepository
+	Metrics      RecommendationMetrics
 }
 
 // NewGetRecommendations wires the dependencies. The optional cold-start
@@ -55,6 +64,12 @@ func NewGetRecommendations(
 // pipeline returned fewer than the desired limit.
 func (u *GetRecommendations) WithPopularity(p PopularityRepository) *GetRecommendations {
 	u.Popularity = p
+	return u
+}
+
+// WithMetrics attaches a metrics recorder. Nil disables recording.
+func (u *GetRecommendations) WithMetrics(m RecommendationMetrics) *GetRecommendations {
+	u.Metrics = m
 	return u
 }
 
@@ -103,6 +118,10 @@ func (u *GetRecommendations) Execute(
 	}
 	if popularAdded > 0 {
 		meta["popular_fallback_count"] = popularAdded
+	}
+
+	if u.Metrics != nil {
+		u.Metrics.IncRecommendationRequest("hybrid", coldStart)
 	}
 
 	return RecommendationResponse{

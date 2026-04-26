@@ -18,6 +18,7 @@ import (
 	"aura/backend/core-go/internal/pkg/auth"
 	"aura/backend/core-go/internal/pkg/filter"
 	"aura/backend/core-go/internal/pkg/logging"
+	"aura/backend/core-go/internal/pkg/metrics"
 	"aura/backend/core-go/internal/pkg/simcache"
 	httptransport "aura/backend/core-go/internal/transport/http"
 	"aura/backend/core-go/internal/transport/http/handlers"
@@ -32,6 +33,8 @@ func Run() error {
 	logging.SetDefault(logger)
 	logger.Info("starting", "env", cfg.Environment, "addr", fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort))
 
+	metricsRecorder := metrics.New()
+
 	db, err := dbpostgres.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("db_connect_failed", "error", err)
@@ -40,7 +43,8 @@ func Run() error {
 	defer db.Close()
 
 	// Infrastructure clients / adapters.
-	var aiClient ai_engine.Client = ai_engine.NewHTTPClient(cfg.AIEngineURL, cfg.AIEngineTimeout)
+	aiHTTP := ai_engine.NewHTTPClient(cfg.AIEngineURL, cfg.AIEngineTimeout).WithMetrics(metricsRecorder)
+	var aiClient ai_engine.Client = aiHTTP
 	embeddingPublisher := embeddings.New(aiClient)
 	adapters := map[entities.ExternalService]external.Adapter{
 		entities.ExternalServiceSteam:     external.SteamAdapter{},
@@ -102,7 +106,8 @@ func Run() error {
 
 	// Use cases.
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc).
-		WithPopularity(metadataRepo)
+		WithPopularity(metadataRepo).
+		WithMetrics(metricsRecorder)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	upsertContentUC := usecase.NewUpsertContent(metadataRepo, embeddingPublisher)
@@ -122,7 +127,11 @@ func Run() error {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
-	router := httptransport.NewRouter(h, httptransport.RouterOptions{Logger: logger})
+	router := httptransport.NewRouter(h, httptransport.RouterOptions{
+		Logger:          logger,
+		MetricsHandler:  metricsRecorder.Handler(),
+		MetricsRecorder: metricsRecorder,
+	})
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
 	return http.ListenAndServe(addr, router)
