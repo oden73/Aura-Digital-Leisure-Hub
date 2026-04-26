@@ -46,6 +46,54 @@ jobs:
           go build ./cmd/migrate
           go build ./cmd/backfill-embeddings
 
+  go-integration:
+    name: Go core (integration + e2e)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/core-go
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aura
+          POSTGRES_PASSWORD: aura
+          POSTGRES_DB: aura_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aura -d aura_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      INTEGRATION_DATABASE_URL: postgres://aura:aura@127.0.0.1:5432/aura_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/core-go/go.mod
+          cache: true
+          cache-dependency-path: backend/core-go/go.sum
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h 127.0.0.1 -p 5432 -U aura -d aura_test >/dev/null 2>&1; then
+              echo "Postgres is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Postgres did not become ready in time"; exit 1
+
+      - name: Repository integration tests
+        run: go test -tags=integration ./internal/infrastructure/repository/postgres/... -count=1 -timeout=180s
+
+      - name: End-to-end API tests
+        run: go test -tags=e2e ./internal/e2e/... -count=1 -timeout=180s
+
   ai-engine:
     name: AI engine (unittest)
     runs-on: ubuntu-latest
