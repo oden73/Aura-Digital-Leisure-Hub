@@ -86,7 +86,8 @@ func Run() error {
 	filterSvc := filter.New().WithMetadata(metadataRepo)
 
 	// Use cases.
-	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc)
+	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc).
+		WithPopularity(metadataRepo)
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	upsertContentUC := usecase.NewUpsertContent(metadataRepo, embeddingPublisher)

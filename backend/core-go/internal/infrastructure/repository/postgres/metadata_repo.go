@@ -135,6 +135,90 @@ func (r *MetadataRepo) SaveItem(item entities.Item) error {
 	return err
 }
 
+// TopRated returns the most popular catalog items ordered by
+// average_rating DESC. When mediaTypes is non-empty the result is restricted
+// to those types. Used by the cold-start fallback to backfill recommendation
+// responses for users with no signal.
+func (r *MetadataRepo) TopRated(limit int, mediaTypes []entities.MediaType) ([]entities.Item, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	const baseSelect = `
+		SELECT
+			item_id,
+			title,
+			original_title,
+			description,
+			release_date,
+			cover_image_url,
+			average_rating,
+			media_type,
+			genre,
+			setting,
+			themes,
+			tonality,
+			target_audience
+		FROM base_items
+	`
+
+	var rows pgx.Rows
+	var err error
+	if len(mediaTypes) == 0 {
+		rows, err = r.DB.Query(ctx, baseSelect+`
+			ORDER BY average_rating DESC NULLS LAST, updated_at DESC
+			LIMIT $1
+		`, limit)
+	} else {
+		typeFilter := make([]string, 0, len(mediaTypes))
+		for _, m := range mediaTypes {
+			typeFilter = append(typeFilter, string(m))
+		}
+		rows, err = r.DB.Query(ctx, baseSelect+`
+			WHERE media_type::text = ANY($1)
+			ORDER BY average_rating DESC NULLS LAST, updated_at DESC
+			LIMIT $2
+		`, typeFilter, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []entities.Item
+	for rows.Next() {
+		var it entities.Item
+		var releaseDate *time.Time
+		var avgRating *float64
+		if err := rows.Scan(
+			&it.ID,
+			&it.Title,
+			&it.OriginalTitle,
+			&it.Description,
+			&releaseDate,
+			&it.CoverImageURL,
+			&avgRating,
+			&it.MediaType,
+			&it.Criteria.Genre,
+			&it.Criteria.Setting,
+			&it.Criteria.Themes,
+			&it.Criteria.Tonality,
+			&it.Criteria.TargetAudience,
+		); err != nil {
+			return nil, err
+		}
+		it.ReleaseDate = releaseDate
+		if avgRating != nil {
+			it.AverageRating = *avgRating
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
 // IterateAll streams every item in the catalog through the visitor callback.
 // It is intentionally batched so memory usage stays flat even for very large
 // catalogs. If the visitor returns an error iteration stops and that error
