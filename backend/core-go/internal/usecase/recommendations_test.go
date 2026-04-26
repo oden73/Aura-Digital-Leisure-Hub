@@ -54,7 +54,9 @@ func (fakeUsers) Create(u entities.User) (entities.User, error)        { return 
 func (fakeUsers) GetByID(_ string) (entities.User, error)              { return entities.User{}, nil }
 func (fakeUsers) GetByEmail(_ string) (entities.User, error)           { return entities.User{}, nil }
 func (fakeUsers) GetProfile(_ string) (entities.UserProfile, error)    { return entities.UserProfile{}, nil }
-func (fakeUsers) LinkExternalAccount(_ entities.ExternalAccount) error { return nil }
+func (fakeUsers) LinkExternalAccount(a entities.ExternalAccount) (entities.ExternalAccount, error) {
+	return a, nil
+}
 
 func TestGetRecommendations_EnrichesAndPropagatesReasoning(t *testing.T) {
 	orch := fakeOrchestrator{res: hybrid.Result{

@@ -11,16 +11,17 @@ import (
 
 // Handlers bundles the HTTP handlers of the core API.
 type Handlers struct {
-	GetRecommendations usecase.GetRecommendationsUseCase
-	Search             usecase.SearchContentUseCase
-	GetContent         usecase.GetContentUseCase
-	UpsertContent      usecase.UpsertContentUseCase
-	UpdateInteraction  usecase.UpdateInteractionUseCase
-	SyncExternal       usecase.SyncExternalContentUseCase
-	Library            usecase.ListLibraryUseCase
-	LibraryItems       usecase.ListLibraryItemsUseCase
-	Auth               *AuthHandlers
-	Users              interface {
+	GetRecommendations  usecase.GetRecommendationsUseCase
+	Search              usecase.SearchContentUseCase
+	GetContent          usecase.GetContentUseCase
+	UpsertContent       usecase.UpsertContentUseCase
+	UpdateInteraction   usecase.UpdateInteractionUseCase
+	SyncExternal        usecase.SyncExternalContentUseCase
+	Library             usecase.ListLibraryUseCase
+	LibraryItems        usecase.ListLibraryItemsUseCase
+	LinkExternalAccount usecase.LinkExternalAccountUseCase
+	Auth                *AuthHandlers
+	Users               interface {
 		GetByID(userID string) (entities.User, error)
 	}
 }
@@ -211,6 +212,49 @@ func (h *Handlers) HandleSyncExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+type linkExternalAccountRequest struct {
+	ServiceName        entities.ExternalService `json:"service_name"`
+	ExternalUserID     string                   `json:"external_user_id"`
+	ExternalProfileURL string                   `json:"external_profile_url,omitempty"`
+}
+
+// HandleLinkExternalAccount serves POST /v1/external-accounts: associates a
+// third-party service profile (Steam, Goodreads, ...) with the authenticated
+// user. The use case ignores any user_id in the body — the link is bound to
+// the caller's session.
+func (h *Handlers) HandleLinkExternalAccount(w http.ResponseWriter, r *http.Request) {
+	if h.LinkExternalAccount == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "External account linking is not configured")
+		return
+	}
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+
+	var req linkExternalAccountRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.ServiceName == "" || req.ExternalUserID == "" {
+		writeError(w, http.StatusBadRequest, "missing_fields", "Missing service_name or external_user_id")
+		return
+	}
+
+	account, err := h.LinkExternalAccount.Execute(uid, entities.ExternalAccount{
+		ServiceName:        req.ServiceName,
+		ExternalUserID:     req.ExternalUserID,
+		ExternalProfileURL: req.ExternalProfileURL,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid request")
+		return
+	}
+	writeJSON(w, http.StatusCreated, account)
 }
 
 // HandleGetProfile returns the current user (requires auth middleware).

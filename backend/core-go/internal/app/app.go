@@ -95,6 +95,7 @@ func Run() error {
 	libraryUC := usecase.NewListLibrary(interactionRepo)
 	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
 	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo, embeddingPublisher)
+	linkExternalUC := usecase.NewLinkExternalAccount(userRepo)
 
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
@@ -104,6 +105,7 @@ func Run() error {
 	h.UpsertContent = upsertContentUC
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
+	h.LinkExternalAccount = linkExternalUC
 	router := httptransport.NewRouter(h)
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)

@@ -144,6 +144,34 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    ExternalAccount:
+      type: object
+      required: [account_id, user_id, service_name, external_user_id]
+      properties:
+        account_id:
+          type: integer
+        user_id:
+          type: string
+        service_name:
+          type: string
+        external_user_id:
+          type: string
+        external_profile_url:
+          type: string
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+    LinkExternalAccountRequest:
+      type: object
+      required: [service_name, external_user_id]
+      properties:
+        service_name:
+          type: string
+        external_user_id:
+          type: string
+        external_profile_url:
+          type: string
     GetRecommendationsRequest:
       type: object
       properties:
@@ -365,6 +393,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecommendationResponse"
+        "401":
+          description: Unauthorized
+
+  /v1/external-accounts:
+    post:
+      summary: Link an external service profile to the current user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkExternalAccountRequest"
+      responses:
+        "201":
+          description: Linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExternalAccount"
         "401":
           description: Unauthorized
 

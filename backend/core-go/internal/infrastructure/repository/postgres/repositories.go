@@ -8,7 +8,7 @@ type UserRepository interface {
 	GetByID(userID string) (entities.User, error)
 	GetByEmail(email string) (entities.User, error)
 	GetProfile(userID string) (entities.UserProfile, error)
-	LinkExternalAccount(account entities.ExternalAccount) error
+	LinkExternalAccount(account entities.ExternalAccount) (entities.ExternalAccount, error)
 }
 
 // InteractionRepository persists the Rui matrix.

@@ -81,14 +81,47 @@ func (r *UserRepo) GetByEmail(email string) (entities.User, error) {
 }
 
 func (r *UserRepo) GetProfile(userID string) (entities.UserProfile, error) {
-	// Placeholder until profile aggregation is implemented.
+	// Placeholder until profile aggregation is implemented (see B5).
 	_, _ = userID, r
 	return entities.UserProfile{UserID: userID}, nil
 }
 
-func (r *UserRepo) LinkExternalAccount(account entities.ExternalAccount) error {
-	// TODO: implement when external sync is wired.
-	_ = account
-	return nil
+// LinkExternalAccount upserts the (user_id, service_name, external_user_id)
+// triple into external_accounts. The (service_name, external_user_id) tuple
+// is globally unique per the schema, so re-linking the same external profile
+// to a different aura user re-points the row to that user (the previous
+// owner loses the link). The function returns the persisted account with
+// account_id and last_synced_at populated.
+func (r *UserRepo) LinkExternalAccount(account entities.ExternalAccount) (entities.ExternalAccount, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if account.UserID == "" || account.ServiceName == "" || account.ExternalUserID == "" {
+		return entities.ExternalAccount{}, errors.New("invalid external account")
+	}
+
+	row := r.DB.QueryRow(ctx, `
+		INSERT INTO external_accounts
+			(user_id, service_name, external_user_id, external_profile_url, last_synced_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (service_name, external_user_id)
+		DO UPDATE SET
+			user_id              = EXCLUDED.user_id,
+			external_profile_url = EXCLUDED.external_profile_url,
+			last_synced_at       = now()
+		RETURNING account_id, last_synced_at
+	`,
+		account.UserID,
+		account.ServiceName,
+		account.ExternalUserID,
+		nullString(account.ExternalProfileURL),
+	)
+
+	var lastSynced time.Time
+	if err := row.Scan(&account.AccountID, &lastSynced); err != nil {
+		return entities.ExternalAccount{}, err
+	}
+	account.LastSyncedAt = &lastSynced
+	return account, nil
 }
 
