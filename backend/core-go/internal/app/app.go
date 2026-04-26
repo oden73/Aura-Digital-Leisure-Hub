@@ -80,7 +80,8 @@ func Run() error {
 		hybrid.PopularityBalanceRule{},
 	)
 	orchestrator := hybrid.NewOrchestrator(cfCoordinator, aiClient, aggregator, ranker).
-		WithMetadata(metadataRepo)
+		WithMetadata(metadataRepo).
+		WithProfiles(userRepo)
 
 	// Cross-cutting services.
 	filterSvc := filter.New().WithMetadata(metadataRepo)
