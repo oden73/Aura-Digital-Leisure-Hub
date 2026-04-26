@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"aura/backend/core-go/internal/domain/entities"
 	"aura/backend/core-go/internal/usecase"
@@ -258,6 +259,9 @@ func (h *Handlers) HandleLinkExternalAccount(w http.ResponseWriter, r *http.Requ
 }
 
 // HandleGetProfile returns the current user (requires auth middleware).
+// Goes through a typed DTO instead of marshalling entities.User directly
+// so we never depend on JSON tags inside the domain to keep secrets out
+// of the wire.
 func (h *Handlers) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	uid, ok := userIDFromContext(r.Context())
 	if !ok {
@@ -269,10 +273,17 @@ func (h *Handlers) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":         u.ID,
-		"username":   u.Username,
-		"email":      u.Email,
-		"created_at": u.CreatedAt,
+	writeJSON(w, http.StatusOK, profileResponse{
+		ID:        u.ID,
+		Username:  u.Username,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339),
 	})
+}
+
+type profileResponse struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
 }

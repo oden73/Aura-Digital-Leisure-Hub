@@ -14,10 +14,10 @@ const (
 
 // ScoredItem represents a candidate with a ranking score.
 type ScoredItem struct {
-	ItemID   string
-	Score    float64
-	Source   ScoreSource
-	Metadata map[string]any
+	ItemID   string         `json:"item_id"`
+	Score    float64        `json:"score"`
+	Source   ScoreSource    `json:"source,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // CombineWith merges two scores for the same item using the provided weight
