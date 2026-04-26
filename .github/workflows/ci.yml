@@ -1,0 +1,84 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [main, master, "feat/**", "fix/**", "chore/**"]
+  pull_request:
+    branches: [main, master]
+
+# Cancel superseded runs of the same ref to keep CI snappy.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-core:
+    name: Go core (vet + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/core-go
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/core-go/go.mod
+          cache: true
+          cache-dependency-path: backend/core-go/go.sum
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1 -race -timeout=120s
+
+      - name: Build CLIs
+        run: |
+          go build ./cmd/api
+          go build ./cmd/migrate
+          go build ./cmd/backfill-embeddings
+
+  ai-engine:
+    name: AI engine (unittest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/ai-engine-python
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/ai-engine-python/requirements.txt
+
+      # The default-import path of `tests/test_content_similarity.py`
+      # only relies on numpy + the pure-Python content-similarity
+      # service, so we install the trimmed deps that are sufficient
+      # for the unit suite. The full requirements.txt is only needed
+      # for a live FastAPI run (sentence-transformers, chromadb, …).
+      - name: Install minimal test deps
+        run: pip install --upgrade pip numpy
+
+      - name: Run unittest
+        run: python -m unittest discover -v -s tests
+
+  docker-compose:
+    name: Compose lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose schema
+        working-directory: backend
+        run: docker compose -f deployments/docker-compose.backend.yml config --quiet
