@@ -22,12 +22,17 @@ func (a *ScoreAggregator) AggregateScores(
 ) []entities.ScoredItem {
 	combined := make(map[string]entities.ScoredItem, len(cf)+len(cb))
 
-	totalWeight := a.WeightCF + a.WeightCB
-	if totalWeight == 0 {
-		totalWeight = 1
+	cfW, cbW := a.WeightCF, a.WeightCB
+	totalWeight := cfW + cbW
+	switch {
+	case totalWeight == 0:
+		// Both weights are zero: fall back to equal-weight averaging so the
+		// hybrid pipeline still produces a meaningful ranking.
+		cfW, cbW = 0.5, 0.5
+	default:
+		cfW /= totalWeight
+		cbW /= totalWeight
 	}
-	cfW := a.WeightCF / totalWeight
-	cbW := a.WeightCB / totalWeight
 
 	for _, s := range cf {
 		existing := combined[s.ItemID]
