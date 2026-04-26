@@ -5,12 +5,18 @@ import (
 	"sort"
 
 	"aura/backend/core-go/internal/domain/entities"
+	"aura/backend/core-go/internal/pkg/simcache"
 )
 
 // UserSimilarityCalculator computes Pearson correlation between two users
-// using their rating maps from the InteractionMatrix.
+// using their rating maps from the InteractionMatrix. When Cache is set
+// the result is memoised under the canonical pair key, so repeated calls
+// for the same (u, v) inside a request — and across requests, until the
+// cache is invalidated by an interaction update — skip the matrix
+// roundtrip entirely.
 type UserSimilarityCalculator struct {
 	Matrix InteractionMatrix
+	Cache  *simcache.Cache // optional; nil disables caching
 }
 
 // Calculate returns Pearson correlation in [-1, 1]; 0 means "not enough
@@ -18,6 +24,9 @@ type UserSimilarityCalculator struct {
 func (c UserSimilarityCalculator) Calculate(userU string, userV string) (float64, error) {
 	if c.Matrix == nil || userU == userV {
 		return 0, nil
+	}
+	if v, ok := c.Cache.Get(userU, userV); ok {
+		return v, nil
 	}
 	ru, err := c.Matrix.GetUserRatings(userU)
 	if err != nil {
@@ -27,7 +36,9 @@ func (c UserSimilarityCalculator) Calculate(userU string, userV string) (float64
 	if err != nil {
 		return 0, err
 	}
-	return pearson(ru, rv), nil
+	val := pearson(ru, rv)
+	c.Cache.Set(userU, userV, val)
+	return val, nil
 }
 
 // UserNeighborhoodBuilder selects the top-k most similar users above the

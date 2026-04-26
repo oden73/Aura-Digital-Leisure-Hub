@@ -17,6 +17,7 @@ import (
 	repopostgres "aura/backend/core-go/internal/infrastructure/repository/postgres"
 	"aura/backend/core-go/internal/pkg/auth"
 	"aura/backend/core-go/internal/pkg/filter"
+	"aura/backend/core-go/internal/pkg/simcache"
 	httptransport "aura/backend/core-go/internal/transport/http"
 	"aura/backend/core-go/internal/transport/http/handlers"
 	"aura/backend/core-go/internal/usecase"
@@ -56,13 +57,20 @@ func Run() error {
 	authHandlers := &handlers.AuthHandlers{Auth: authSvc, Users: userRepo}
 
 	// Domain services: collaborative filtering pipeline.
-	userSim := cf.UserSimilarityCalculator{Matrix: matrixRepo}
+	// Similarity caches are sized to comfortably fit a few thousand
+	// active users / popular items at once and expire after 30 minutes;
+	// any rating change invalidates the affected slots immediately via
+	// UpdateInteraction.WithCacheInvalidation.
+	userSimCache := simcache.New(cfg.SimilarityCacheTTL, cfg.UserSimilarityCacheMaxEntries)
+	itemSimCache := simcache.New(cfg.SimilarityCacheTTL, cfg.ItemSimilarityCacheMaxEntries)
+
+	userSim := cf.UserSimilarityCalculator{Matrix: matrixRepo, Cache: userSimCache}
 	user2user := cf.User2UserRecommender{
 		Similarity:   userSim,
 		Neighborhood: cf.UserNeighborhoodBuilder{ThresholdAlpha: 0, Similarity: userSim},
 		Predictor:    cf.UserBasedPredictor{Stats: matrixRepo, Matrix: matrixRepo},
 	}
-	itemSim := cf.ItemSimilarityCalculator{Matrix: matrixRepo, Stats: matrixRepo}
+	itemSim := cf.ItemSimilarityCalculator{Matrix: matrixRepo, Stats: matrixRepo, Cache: itemSimCache}
 	item2item := cf.Item2ItemRecommender{
 		Similarity:   itemSim,
 		Neighborhood: cf.ItemNeighborhoodBuilder{ThresholdBeta: 0, Similarity: itemSim},
@@ -92,7 +100,8 @@ func Run() error {
 	searchUC := usecase.NewSearchContent(metadataRepo)
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	upsertContentUC := usecase.NewUpsertContent(metadataRepo, embeddingPublisher)
-	updateUC := usecase.NewUpdateInteraction(interactionRepo)
+	updateUC := usecase.NewUpdateInteraction(interactionRepo).
+		WithCacheInvalidation(userSimCache, itemSimCache)
 	libraryUC := usecase.NewListLibrary(interactionRepo)
 	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
 	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo, embeddingPublisher)

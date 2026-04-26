@@ -13,6 +13,13 @@ type Config struct {
 	JWTSecret       string
 	AIEngineURL     string
 	AIEngineTimeout time.Duration
+
+	// Similarity-cache tuning. TTL applies to both caches; the max-entries
+	// limits are separate because the user pool is typically larger than
+	// the popular-items pool, so each side wants its own ceiling.
+	SimilarityCacheTTL            time.Duration
+	UserSimilarityCacheMaxEntries int
+	ItemSimilarityCacheMaxEntries int
 }
 
 func Load() Config {
@@ -45,12 +52,33 @@ func Load() Config {
 		}
 	}
 
-	return Config{
-		HTTPHost:        "0.0.0.0",
-		HTTPPort:        port,
-		DatabaseURL:     dbURL,
-		JWTSecret:       jwtSecret,
-		AIEngineURL:     aiURL,
-		AIEngineTimeout: aiTimeout,
+	simTTL := 30 * time.Minute
+	if v := os.Getenv("SIMILARITY_CACHE_TTL_SECONDS"); v != "" {
+		if s, err := strconv.Atoi(v); err == nil && s > 0 {
+			simTTL = time.Duration(s) * time.Second
+		}
 	}
+	userSimMax := envInt("USER_SIMILARITY_CACHE_MAX", 100_000)
+	itemSimMax := envInt("ITEM_SIMILARITY_CACHE_MAX", 50_000)
+
+	return Config{
+		HTTPHost:                      "0.0.0.0",
+		HTTPPort:                      port,
+		DatabaseURL:                   dbURL,
+		JWTSecret:                     jwtSecret,
+		AIEngineURL:                   aiURL,
+		AIEngineTimeout:               aiTimeout,
+		SimilarityCacheTTL:            simTTL,
+		UserSimilarityCacheMaxEntries: userSimMax,
+		ItemSimilarityCacheMaxEntries: itemSimMax,
+	}
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
 }

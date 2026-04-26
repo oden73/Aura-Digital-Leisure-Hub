@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"aura/backend/core-go/internal/domain/entities"
+	"aura/backend/core-go/internal/pkg/simcache"
 )
 
 // ItemSimilarityCalculator computes similarity between two items using the
@@ -22,6 +23,7 @@ import (
 type ItemSimilarityCalculator struct {
 	Matrix InteractionMatrix
 	Stats  UserStatisticsRepository
+	Cache  *simcache.Cache // optional; nil disables caching
 }
 
 // Calculate returns adjusted cosine similarity in [-1, 1].
@@ -30,6 +32,9 @@ type ItemSimilarityCalculator struct {
 func (c ItemSimilarityCalculator) Calculate(itemI string, itemJ string) (float64, error) {
 	if c.Matrix == nil || itemI == itemJ {
 		return 0, nil
+	}
+	if v, ok := c.Cache.Get(itemI, itemJ); ok {
+		return v, nil
 	}
 
 	ri, err := c.Matrix.GetItemRatings(itemI)
@@ -60,9 +65,12 @@ func (c ItemSimilarityCalculator) Calculate(itemI string, itemJ string) (float64
 		common++
 	}
 	if common < 2 || denI == 0 || denJ == 0 {
+		c.Cache.Set(itemI, itemJ, 0)
 		return 0, nil
 	}
-	return num / (math.Sqrt(denI) * math.Sqrt(denJ)), nil
+	val := num / (math.Sqrt(denI) * math.Sqrt(denJ))
+	c.Cache.Set(itemI, itemJ, val)
+	return val, nil
 }
 
 func (c ItemSimilarityCalculator) userMean(userID string) (float64, error) {
