@@ -32,6 +32,10 @@ type tokenResponse struct {
 	Refresh string `json:"refresh"`
 }
 
+type refreshRequest struct {
+	Refresh string `json:"refresh"`
+}
+
 func (a *AuthHandlers) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -80,6 +84,29 @@ func (a *AuthHandlers) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	t, err := a.Auth.Authenticate(auth.Credentials{Email: req.Email, Password: req.Password})
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
+		return
+	}
+	writeJSON(w, http.StatusOK, tokenResponse{Access: t.Access, Refresh: t.Refresh})
+}
+
+// HandleRefresh issues a fresh access/refresh pair from a valid refresh
+// token. It deliberately reuses the same response shape as register/login
+// so clients can drop in the new tokens without branching. A failed
+// validation always returns 401 — we never leak whether the token was
+// expired vs malformed vs signed by a different secret.
+func (a *AuthHandlers) HandleRefresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.Refresh == "" {
+		writeError(w, http.StatusBadRequest, "missing_refresh", "Missing refresh token")
+		return
+	}
+	t, err := a.Auth.Tokens.Refresh(req.Refresh)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid_refresh", "Invalid refresh token")
 		return
 	}
 	writeJSON(w, http.StatusOK, tokenResponse{Access: t.Access, Refresh: t.Refresh})

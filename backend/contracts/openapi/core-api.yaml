@@ -42,6 +42,12 @@ components:
         password:
           type: string
           format: password
+    RefreshRequest:
+      type: object
+      required: [refresh]
+      properties:
+        refresh:
+          type: string
     User:
       type: object
       required: [id, username, email, created_at]
@@ -249,6 +255,25 @@ paths:
                 $ref: "#/components/schemas/TokenResponse"
         "401":
           description: Invalid credentials
+
+  /v1/auth/refresh:
+    post:
+      summary: Refresh tokens using a valid refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid refresh token
 
   /v1/profile:
     get:

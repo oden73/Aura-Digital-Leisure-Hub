@@ -13,6 +13,7 @@ func NewRouter(h *handlers.Handlers) http.Handler {
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.HandleFunc("POST /v1/auth/register", h.Auth.HandleRegister)
 	mux.HandleFunc("POST /v1/auth/login", h.Auth.HandleLogin)
+	mux.HandleFunc("POST /v1/auth/refresh", h.Auth.HandleRefresh)
 	mux.HandleFunc("POST /v1/recommendations", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetRecommendations))
 	mux.HandleFunc("GET /v1/search", h.HandleSearch)
 	mux.HandleFunc("GET /v1/content/{id}", h.HandleGetContent)
