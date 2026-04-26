@@ -17,12 +17,21 @@ type Response struct {
 	Reasoning string
 }
 
+// EmbeddingRequest describes a single item whose textual representation must
+// be embedded and persisted in the vector store.
+type EmbeddingRequest struct {
+	ItemID string
+	Text   string
+}
+
 // Client is the abstraction the hybrid orchestrator uses to talk to the AI
 // engine. ComputeCB returns the CB scores plus an optional reasoning string
-// produced by the LLM.
+// produced by the LLM. GenerateEmbedding pushes an item's text into the
+// vector store so subsequent CB queries can find it.
 type Client interface {
 	ComputeCB(req Request) (Response, error)
 	GenerateReasoning(userID string, items []entities.ScoredItem) (string, error)
+	GenerateEmbedding(req EmbeddingRequest) error
 }
 
 // StubClient is a no-op client used when the AI engine is unreachable; it
@@ -34,3 +43,5 @@ func (StubClient) ComputeCB(_ Request) (Response, error) { return Response{}, ni
 func (StubClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (string, error) {
 	return "", nil
 }
+
+func (StubClient) GenerateEmbedding(_ EmbeddingRequest) error { return nil }

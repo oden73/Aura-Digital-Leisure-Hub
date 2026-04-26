@@ -120,3 +120,52 @@ func (c *HTTPClient) ComputeCB(req Request) (Response, error) {
 func (c *HTTPClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (string, error) {
 	return "", nil
 }
+
+type embeddingRequestPayload struct {
+	ItemID string `json:"item_id"`
+	Text   string `json:"text"`
+}
+
+// GenerateEmbedding sends item text to the AI engine for embedding and
+// upserting into the vector store. The response body is intentionally
+// discarded — Go core only cares that the embedding was persisted.
+func (c *HTTPClient) GenerateEmbedding(req EmbeddingRequest) error {
+	if req.ItemID == "" || req.Text == "" {
+		return fmt.Errorf("ai engine: item_id and text are required")
+	}
+
+	body, err := json.Marshal(embeddingRequestPayload{
+		ItemID: req.ItemID,
+		Text:   req.Text,
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.HTTP.Timeout)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.BaseURL+"/v1/embeddings/generate",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("ai engine: status=%d body=%s", resp.StatusCode, string(raw))
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
