@@ -76,17 +76,21 @@ func (b UserNeighborhoodBuilder) Build(userID string, k int) ([]Neighbor, error)
 }
 
 // UserBasedPredictor predicts a user's rating for an item from neighbours.
+//
+// Implements the variance-normalised weighted average from the project spec
+// (recomendations.md, section 1.2.2):
+//
+//	r_hat(u, i) = mean(u) + sigma_u * sum( sim(u,v) * (r(v,i) - mean(v)) / sigma_v ) / sum(|sim(u,v)|)
+//
+// over neighbours v who have rated i. When no neighbour rated i the prediction
+// falls back to mean(u). When sigma_v is zero the neighbour contributes
+// nothing (we cannot rescale their deviation).
 type UserBasedPredictor struct {
 	Stats  UserStatisticsRepository
 	Matrix InteractionMatrix
 }
 
-// PredictRating implements the mean-centered weighted average:
-//
-//	r_hat(u, i) = mean(u) + sum(sim(u,v) * (r(v,i) - mean(v))) / sum(|sim(u,v)|)
-//
-// over neighbours v who have rated i. When no neighbour rated i the prediction
-// falls back to mean(u).
+// PredictRating implements the σ-normalised mean-centered weighted average.
 func (p UserBasedPredictor) PredictRating(userID string, itemID string, neighbors []Neighbor) (float64, error) {
 	if p.Matrix == nil || p.Stats == nil {
 		return 0, nil
@@ -95,6 +99,11 @@ func (p UserBasedPredictor) PredictRating(userID string, itemID string, neighbor
 	if err != nil {
 		return 0, err
 	}
+	varU, err := p.Stats.GetVariance(userID)
+	if err != nil {
+		return 0, err
+	}
+	sigmaU := math.Sqrt(varU)
 
 	itemRatings, err := p.Matrix.GetItemRatings(itemID)
 	if err != nil {
@@ -111,13 +120,23 @@ func (p UserBasedPredictor) PredictRating(userID string, itemID string, neighbor
 		if err != nil {
 			return 0, err
 		}
-		num += n.Similarity * (ratingV - meanV)
+		varV, err := p.Stats.GetVariance(n.ID)
+		if err != nil {
+			return 0, err
+		}
+		sigmaV := math.Sqrt(varV)
+		if sigmaV == 0 {
+			// Neighbour rates everything the same: their deviation is zero
+			// after normalisation, so they cannot contribute information.
+			continue
+		}
+		num += n.Similarity * (ratingV - meanV) / sigmaV
 		den += math.Abs(n.Similarity)
 	}
 	if den == 0 {
 		return meanU, nil
 	}
-	return meanU + num/den, nil
+	return meanU + sigmaU*(num/den), nil
 }
 
 // User2UserRecommender is the assembled user-based pipeline.
