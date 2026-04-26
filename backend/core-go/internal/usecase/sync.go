@@ -45,7 +45,7 @@ func (u *SyncExternalContent) Execute(
 		return entities.Item{}, err
 	}
 	item := data.ToItemMetadata()
-	if err := u.Metadata.SaveItem(item); err != nil {
+	if err := u.Metadata.SaveItem(&item); err != nil {
 		return entities.Item{}, err
 	}
 	if u.Publisher != nil {

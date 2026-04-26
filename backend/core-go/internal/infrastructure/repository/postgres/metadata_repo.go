@@ -120,12 +120,13 @@ func (r *MetadataRepo) loadDetails(ctx context.Context, it *entities.Item) error
 
 // SaveItem persists base_items and the matching details row in a single
 // transaction. When item.ID is empty the row is inserted and the new
-// item_id is written back into item via the RETURNING clause so the
-// details upsert can target it. Details are written only for the matching
-// media_type (book/cinema/game); supplying a BookDetails alongside
-// MediaTypeGame is a no-op for the games table — the book section will
-// still be written, callers must keep their objects consistent.
-func (r *MetadataRepo) SaveItem(item entities.Item) error {
+// item_id is written back into the supplied pointer (via RETURNING) so
+// callers can use it for downstream operations such as vector indexing.
+// Details are written only for the matching media_type (book/cinema/
+// game); supplying a BookDetails alongside MediaTypeGame is a no-op for
+// the games table — the book section will still be written, callers
+// must keep their objects consistent.
+func (r *MetadataRepo) SaveItem(item *entities.Item) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -135,10 +136,11 @@ func (r *MetadataRepo) SaveItem(item entities.Item) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	id, err := upsertBaseItem(ctx, tx, item)
+	id, err := upsertBaseItem(ctx, tx, *item)
 	if err != nil {
 		return err
 	}
+	item.ID = id
 
 	if item.BookDetails != nil {
 		if err := upsertBookDetails(ctx, tx, id, item.BookDetails); err != nil {

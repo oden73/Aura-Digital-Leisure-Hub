@@ -10,15 +10,19 @@ import (
 )
 
 type fakeMetadataSaver struct {
-	saved entities.Item
-	err   error
+	saved   entities.Item
+	err     error
+	stampID string
 }
 
-func (f *fakeMetadataSaver) SaveItem(item entities.Item) error {
+func (f *fakeMetadataSaver) SaveItem(item *entities.Item) error {
 	if f.err != nil {
 		return f.err
 	}
-	f.saved = item
+	if item.ID == "" && f.stampID != "" {
+		item.ID = f.stampID
+	}
+	f.saved = *item
 	return nil
 }
 

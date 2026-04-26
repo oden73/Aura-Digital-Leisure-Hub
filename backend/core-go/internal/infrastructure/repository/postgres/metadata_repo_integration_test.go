@@ -119,7 +119,7 @@ func TestMetadataRepo_SaveItemGame_UpsertsBaseAndDetails(t *testing.T) {
 	in.Title = "Disco Elysium: Final Cut"
 	in.AverageRating = 9.4
 	in.GameDetails.Platforms = "pc, mac, console, switch"
-	if err := repo.SaveItem(in); err != nil {
+	if err := repo.SaveItem(&in); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
 

@@ -35,7 +35,7 @@ func (f fakeMetadata) GetItem(id string) (entities.Item, error) {
 	return entities.Item{}, errors.New("missing")
 }
 
-func (f fakeMetadata) SaveItem(_ entities.Item) error                        { return nil }
+func (f fakeMetadata) SaveItem(_ *entities.Item) error                       { return nil }
 func (f fakeMetadata) SearchByText(_ string, _ int) ([]entities.Item, error) { return nil, nil }
 
 func (f fakeMetadata) TopRated(limit int, _ []entities.MediaType) ([]entities.Item, error) {

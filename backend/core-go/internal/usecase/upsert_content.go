@@ -19,7 +19,7 @@ type UpsertContentUseCase interface {
 // block catalog updates.
 type UpsertContent struct {
 	Metadata interface {
-		SaveItem(item entities.Item) error
+		SaveItem(item *entities.Item) error
 	}
 	Publisher *embeddings.Publisher
 }
@@ -28,16 +28,19 @@ type UpsertContent struct {
 // tests or environments where the AI engine is not yet available.
 func NewUpsertContent(
 	metadata interface {
-		SaveItem(item entities.Item) error
+		SaveItem(item *entities.Item) error
 	},
 	publisher *embeddings.Publisher,
 ) *UpsertContent {
 	return &UpsertContent{Metadata: metadata, Publisher: publisher}
 }
 
-// Execute saves the item and then triggers embedding generation.
+// Execute saves the item and then triggers embedding generation. The
+// repository writes the freshly-allocated UUID back into item.ID, so by
+// the time we hand it to the publisher the embedding row is correlated
+// with the right base_items entry.
 func (u *UpsertContent) Execute(item entities.Item) error {
-	if err := u.Metadata.SaveItem(item); err != nil {
+	if err := u.Metadata.SaveItem(&item); err != nil {
 		return err
 	}
 	if u.Publisher != nil {

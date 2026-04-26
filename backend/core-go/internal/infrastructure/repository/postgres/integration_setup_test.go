@@ -171,21 +171,17 @@ func mustCreateUser(t *testing.T, repo *UserRepo, username, email string) string
 
 // mustSaveItem persists a base_items row (no media-specific details
 // unless the caller pre-populated them) and returns the assigned id.
+// SaveItem writes the generated UUID back into the supplied Item so
+// callers do not need a follow-up SELECT.
 func mustSaveItem(t *testing.T, repo *MetadataRepo, item entities.Item) string {
 	t.Helper()
-	if err := repo.SaveItem(item); err != nil {
+	if err := repo.SaveItem(&item); err != nil {
 		t.Fatalf("save item %q: %v", item.Title, err)
 	}
-	// SaveItem currently does not write generated id back into the
-	// caller's struct, so we look it up by title to find the row we
-	// just inserted. Tests should use unique titles.
-	row := repo.DB.QueryRow(context.Background(),
-		`SELECT item_id FROM base_items WHERE title = $1 ORDER BY created_at DESC LIMIT 1`, item.Title)
-	var id string
-	if err := row.Scan(&id); err != nil {
-		t.Fatalf("lookup saved item id: %v", err)
+	if item.ID == "" {
+		t.Fatalf("save item %q: ID was not populated", item.Title)
 	}
-	return id
+	return item.ID
 }
 
 // mustSaveInteraction inserts a Rui row.

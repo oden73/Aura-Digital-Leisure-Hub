@@ -18,9 +18,14 @@ type InteractionRepository interface {
 }
 
 // MetadataRepository stores and retrieves catalog items and their details.
+//
+// SaveItem mutates the supplied Item: when item.ID is empty the freshly
+// generated UUID is written back via the pointer so callers can use it
+// for downstream operations (vector indexing, embedding publication, ...)
+// without an extra round-trip lookup.
 type MetadataRepository interface {
 	GetItem(itemID string) (entities.Item, error)
-	SaveItem(item entities.Item) error
+	SaveItem(item *entities.Item) error
 	SearchByText(query string, limit int) ([]entities.Item, error)
 }
 
