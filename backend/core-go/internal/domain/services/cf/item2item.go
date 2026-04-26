@@ -8,8 +8,17 @@ import (
 )
 
 // ItemSimilarityCalculator computes similarity between two items using the
-// adjusted cosine formula on co-rating users (each user's rating is centered
-// around their personal mean to remove individual rating bias).
+// adjusted cosine formula on co-rating users.
+//
+// Spec reference: docs/predone/recomendations.md, section 1.2.3, formula
+//
+//	s(i, j) = sum_{u in U_i ∩ U_j} (r_ui - mean_u) * (r_uj - mean_u)
+//	          / ( sqrt(sum (r_ui - mean_u)^2) * sqrt(sum (r_uj - mean_u)^2) )
+//
+// NB: the spec PDF prints the numerator with a single deviation term; that
+// is treated as a typesetting error — the canonical adjusted cosine has the
+// product of the two deviations in the numerator (otherwise the measure is
+// not symmetric in i, j and degenerates). We implement the canonical form.
 type ItemSimilarityCalculator struct {
 	Matrix InteractionMatrix
 	Stats  UserStatisticsRepository
@@ -107,12 +116,14 @@ type ItemBasedPredictor struct {
 	Matrix InteractionMatrix
 }
 
-// PredictRating implements the standard item-item formula:
+// PredictRating implements the item-item formula from the spec
+// (recomendations.md, section 1.2.3):
 //
-//	r_hat(u, i) = sum(sim(i, j) * r(u, j)) / sum(|sim(i, j)|)
+//	r_hat(u, i) = sum_{j in N(i)} sim(i, j) * r_uj
+//	            / sum_{j in N(i)} |sim(i, j)|
 //
-// over neighbour items j the user has rated. Returns 0 when no neighbour
-// is usable (caller decides on a fallback).
+// over neighbour items j the user has rated. Returns 0 when no neighbour is
+// usable (caller decides on a fallback).
 func (p ItemBasedPredictor) PredictRating(userID string, itemID string, neighbors []Neighbor) (float64, error) {
 	if p.Matrix == nil {
 		return 0, nil
