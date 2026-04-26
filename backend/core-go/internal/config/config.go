@@ -9,6 +9,7 @@ import (
 type Config struct {
 	HTTPHost        string
 	HTTPPort        int
+	Environment     string
 	DatabaseURL     string
 	JWTSecret       string
 	AIEngineURL     string
@@ -61,9 +62,15 @@ func Load() Config {
 	userSimMax := envInt("USER_SIMILARITY_CACHE_MAX", 100_000)
 	itemSimMax := envInt("ITEM_SIMILARITY_CACHE_MAX", 50_000)
 
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+
 	return Config{
 		HTTPHost:                      "0.0.0.0",
 		HTTPPort:                      port,
+		Environment:                   env,
 		DatabaseURL:                   dbURL,
 		JWTSecret:                     jwtSecret,
 		AIEngineURL:                   aiURL,

@@ -17,6 +17,7 @@ import (
 	repopostgres "aura/backend/core-go/internal/infrastructure/repository/postgres"
 	"aura/backend/core-go/internal/pkg/auth"
 	"aura/backend/core-go/internal/pkg/filter"
+	"aura/backend/core-go/internal/pkg/logging"
 	"aura/backend/core-go/internal/pkg/simcache"
 	httptransport "aura/backend/core-go/internal/transport/http"
 	"aura/backend/core-go/internal/transport/http/handlers"
@@ -27,8 +28,13 @@ import (
 func Run() error {
 	cfg := config.Load()
 
+	logger := logging.New(cfg.Environment)
+	logging.SetDefault(logger)
+	logger.Info("starting", "env", cfg.Environment, "addr", fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort))
+
 	db, err := dbpostgres.Connect(context.Background(), cfg.DatabaseURL)
 	if err != nil {
+		logger.Error("db_connect_failed", "error", err)
 		return err
 	}
 	defer db.Close()
@@ -116,7 +122,7 @@ func Run() error {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
-	router := httptransport.NewRouter(h)
+	router := httptransport.NewRouter(h, httptransport.RouterOptions{Logger: logger})
 
 	addr := fmt.Sprintf("%s:%d", cfg.HTTPHost, cfg.HTTPPort)
 	return http.ListenAndServe(addr, router)

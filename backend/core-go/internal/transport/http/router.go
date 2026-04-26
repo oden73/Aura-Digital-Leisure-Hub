@@ -1,16 +1,37 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 
 	"aura/backend/core-go/internal/transport/http/handlers"
 )
 
-// NewRouter builds the HTTP router with all public endpoints.
-func NewRouter(h *handlers.Handlers) http.Handler {
+// RouterOptions tunes the cross-cutting middleware chain wrapped around
+// the mux. Every field is optional: zero values disable the relevant
+// middleware so this package stays useful in tests.
+//
+// More observability hooks (Prometheus metrics, CORS, rate limiting) are
+// added incrementally in subsequent changes; this struct grows with them.
+type RouterOptions struct {
+	Logger      *slog.Logger
+	HealthCheck http.HandlerFunc
+}
+
+// NewRouter builds the HTTP router with all public endpoints. The
+// returned http.Handler already includes the middleware chain
+// (request-id → access-log → metrics → cors → rate-limit → recover).
+// Order matters: request-id must be first so every other middleware
+// can correlate by id; recover is innermost so panics never escape the
+// access log without a 500 status.
+func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /health", handlers.Health)
+	healthFn := handlers.Health
+	if opts.HealthCheck != nil {
+		healthFn = opts.HealthCheck
+	}
+	mux.HandleFunc("GET /health", healthFn)
 	mux.HandleFunc("POST /v1/auth/register", h.Auth.HandleRegister)
 	mux.HandleFunc("POST /v1/auth/login", h.Auth.HandleLogin)
 	mux.HandleFunc("POST /v1/auth/refresh", h.Auth.HandleRefresh)
@@ -25,5 +46,9 @@ func NewRouter(h *handlers.Handlers) http.Handler {
 	mux.HandleFunc("POST /v1/external-accounts", handlers.Auth(h.Auth.Auth.Tokens, h.HandleLinkExternalAccount))
 	mux.HandleFunc("GET /v1/profile", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetProfile))
 
-	return handlers.Recover(mux)
+	var chain http.Handler = mux
+	chain = handlers.Recover(chain)
+	chain = handlers.AccessLog(opts.Logger)(chain)
+	chain = handlers.RequestID(chain)
+	return chain
 }
