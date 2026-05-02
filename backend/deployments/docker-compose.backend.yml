@@ -1,9 +1,5 @@
 # Local-development stack for the Aura backend.
 #
-# Brings up Postgres + ChromaDB + Go core + Python AI engine. The
-# `migrate` service applies SQL migrations once at startup and exits;
-# the API is gated on it via depends_on/condition: service_completed_successfully.
-#
 # Usage:
 #   cd backend
 #   cp .env.example .env
@@ -31,17 +27,14 @@ services:
     ports:
       - "${CHROMA_PORT:-8000}:8000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - chroma_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/api/v1/heartbeat >/dev/null 2>&1 || exit 1"]
+      test: ["CMD", "python3", "-c", "import socket; s=socket.create_connection(('localhost', 8000), 2); s.close()"]
       interval: 5s
       timeout: 3s
       retries: 30
+      start_period: 15s
 
-  # One-shot migration runner. Compose treats this as a "task" service:
-  # it builds the same image as core-go (the migrate binary lives
-  # inside it), runs `migrate up`, and exits. The api/ai-engine wait
-  # for it to complete successfully via depends_on.
   migrate:
     build:
       context: ..
@@ -103,7 +96,7 @@ services:
       postgres:
         condition: service_healthy
       chroma:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   postgres_data:

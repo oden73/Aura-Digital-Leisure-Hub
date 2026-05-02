@@ -33,10 +33,12 @@ class ChromaVectorStoreAdapter:
         )
 
     def upsert(self, item_id: str, vector: list[float], metadata: dict | None = None) -> None:
+        # Chroma requires non-empty metadata; fall back to a minimal sentinel.
+        effective_meta = metadata if metadata else {"item_id": item_id}
         self._collection.upsert(
             ids=[item_id],
             embeddings=[vector],
-            metadatas=[metadata or {}],
+            metadatas=[effective_meta],
         )
 
     def get_vectors(self, item_ids: Iterable[str]) -> dict[str, list[float]]:
