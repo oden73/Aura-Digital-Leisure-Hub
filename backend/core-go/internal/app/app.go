@@ -52,7 +52,7 @@ func Run() error {
 	var aiClient ai_engine.Client = aiHTTP
 	embeddingPublisher := embeddings.New(aiClient)
 	adapters := map[entities.ExternalService]external.Adapter{
-		entities.ExternalServiceSteam:     external.SteamAdapter{},
+		entities.ExternalServiceSteam:     external.SteamAdapter{APIKey: cfg.SteamAPIKey},
 		entities.ExternalServiceKinopoisk: external.TMDBAdapter{},
 		entities.ExternalServiceGoodreads: external.BooksAdapter{},
 	}

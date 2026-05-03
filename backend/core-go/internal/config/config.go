@@ -36,6 +36,9 @@ type Config struct {
 	// bucket. RateLimitRPS == 0 disables rate limiting entirely.
 	RateLimitRPS   float64
 	RateLimitBurst float64
+
+	// SteamAPIKey is the Steam Web API key used by SteamAdapter.
+	SteamAPIKey string
 }
 
 func Load() Config {
@@ -101,6 +104,8 @@ func Load() Config {
 	rps := envFloat("RATE_LIMIT_RPS", 20)
 	burst := envFloat("RATE_LIMIT_BURST", 40)
 
+	steamAPIKey := os.Getenv("STEAM_API_KEY")
+
 	return Config{
 		HTTPHost:                      "0.0.0.0",
 		HTTPPort:                      port,
@@ -116,6 +121,7 @@ func Load() Config {
 		CORSAllowedOrigins:            corsOrigins,
 		RateLimitRPS:                  rps,
 		RateLimitBurst:                burst,
+		SteamAPIKey:                   steamAPIKey,
 	}
 }
 
