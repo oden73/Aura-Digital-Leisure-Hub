@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, Mail, Lock, User, ArrowRight, Chrome } from 'lucide-react';
+import { Sparkles, Mail, Lock, User, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  registerWithEmail,
-  signInWithGoogle,
-  describeAuthError,
-} from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 
 interface LocationState {
@@ -15,38 +10,20 @@ interface LocationState {
 }
 
 export default function Register() {
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, register } = useAuth();
 
   const redirectTo = (location.state as LocationState | null)?.from?.pathname || '/';
 
   useEffect(() => {
-    if (user) {
-      navigate(redirectTo, { replace: true });
-    }
+    if (user) navigate(redirectTo, { replace: true });
   }, [user, navigate, redirectTo]);
-
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setSubmitting(true);
-    try {
-      const u = await signInWithGoogle();
-      toast.success(`Welcome to Aura, ${u.displayName ?? 'friend'}!`);
-      navigate(redirectTo, { replace: true });
-    } catch (err) {
-      const message = describeAuthError(err);
-      setError(message);
-      toast.error(message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,11 +36,11 @@ export default function Register() {
     }
     setSubmitting(true);
     try {
-      const u = await registerWithEmail(email, password, name.trim() || undefined);
-      toast.success(`Welcome to Aura, ${u.displayName ?? u.email ?? 'friend'}!`);
+      await register(username.trim(), email, password);
+      toast.success(`Welcome to Aura, ${username.trim()}!`);
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      const message = describeAuthError(err);
+      const message = err instanceof Error ? err.message : 'Registration failed.';
       setError(message);
       toast.error(message);
     } finally {
@@ -73,7 +50,7 @@ export default function Register() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-md glass-panel rounded-3xl p-8 md:p-10 shadow-2xl"
@@ -92,39 +69,20 @@ export default function Register() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          disabled={submitting}
-          className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-3 mb-8 group disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Chrome className="w-5 h-5 text-brand-500" />
-          Continue with Google
-        </button>
-
-        <div className="relative mb-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/10"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-slate-950 px-2 text-slate-500">Or sign up with email</span>
-          </div>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <label htmlFor="register-name" className="text-sm font-medium text-slate-300 ml-1">Full Name</label>
+            <label htmlFor="register-username" className="text-sm font-medium text-slate-300 ml-1">Username</label>
             <div className="relative group">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-brand-500 transition-colors" />
               <input
-                id="register-name"
+                id="register-username"
                 type="text"
-                autoComplete="name"
+                autoComplete="username"
                 required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:bg-white/10 transition-all"
-                placeholder="John Doe"
+                placeholder="johndoe"
               />
             </div>
           </div>
