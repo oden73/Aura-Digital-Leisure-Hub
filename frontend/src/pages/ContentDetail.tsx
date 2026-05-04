@@ -3,41 +3,74 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, Star, Gamepad2, Book, Film, Share2, Heart, ExternalLink, Plus, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import { MOCK_DATA } from '../data';
 import { useAuth } from '../contexts/AuthContext';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import {
+  apiGetContent,
+  apiGetLibrary,
+  apiUpdateInteraction,
+  apiSearch,
+  mapApiItem,
+  ApiItem,
+} from '../services/api';
+import { MediaItem } from '../types';
 
 export default function ContentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  const [item, setItem] = useState<MediaItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  
-  const item = MOCK_DATA.find(i => i.id === id);
+  const [related, setRelated] = useState<MediaItem[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+
+    apiGetContent(id)
+      .then((raw: ApiItem) => {
+        const mapped = mapApiItem(raw);
+        setItem(mapped);
+
+        const query = raw.criteria.tonality || raw.criteria.setting || raw.title;
+        apiSearch(query, 6)
+          .then(results => {
+            setRelated(results.map(mapApiItem).filter(r => r.id !== id).slice(0, 3));
+          })
+          .catch(() => {});
+      })
+      .catch(() => setItem(null))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   useEffect(() => {
     if (!user || !id) return;
-
-    const libRef = doc(db, 'users', user.uid, 'library', id);
-    const unsubscribe = onSnapshot(libRef, (doc) => {
-      setIsInLibrary(doc.exists());
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/library/${id}`);
-    });
-
-    return unsubscribe;
+    apiGetLibrary()
+      .then(interactions => {
+        setIsInLibrary(
+          interactions.some(
+            i => i.item_id === id && i.status && i.status !== 'dropped',
+          ),
+        );
+      })
+      .catch(() => {});
   }, [user, id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!item) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center">
         <h2 className="text-2xl font-bold mb-4">Content not found</h2>
-        <button 
-          onClick={() => navigate('/')}
-          className="text-brand-500 hover:underline"
-        >
+        <button onClick={() => navigate('/')} className="text-brand-500 hover:underline">
           Back to home
         </button>
       </div>
@@ -49,34 +82,20 @@ export default function ContentDetail() {
       navigate('/login');
       return;
     }
+    if (!id) return;
 
     setIsAdding(true);
-    const libRef = doc(db, 'users', user.uid, 'library', item.id);
     const wasInLibrary = isInLibrary;
-
     try {
-      if (wasInLibrary) {
-        await deleteDoc(libRef);
-        toast.success(`Removed “${item.title}” from your library`);
-      } else {
-        await setDoc(libRef, {
-          itemId: item.id,
-          type: item.type,
-          title: item.title,
-          addedAt: serverTimestamp(),
-          status: 'to-watch'
-        });
-        toast.success(`Added “${item.title}” to your library`);
-      }
-    } catch (error) {
-      handleFirestoreError(
-        error,
-        OperationType.WRITE,
-        `users/${user.uid}/library/${item.id}`,
+      await apiUpdateInteraction(id, { status: wasInLibrary ? 'dropped' : 'planned' });
+      setIsInLibrary(!wasInLibrary);
+      toast.success(
         wasInLibrary
-          ? `Couldn't remove “${item.title}” from your library.`
-          : `Couldn't add “${item.title}” to your library.`,
+          ? `Removed "${item.title}" from your library`
+          : `Added "${item.title}" to your library`,
       );
+    } catch {
+      toast.error(wasInLibrary ? `Couldn't remove "${item.title}" from your library.` : `Couldn't add "${item.title}" to your library.`);
     } finally {
       setIsAdding(false);
     }
@@ -84,15 +103,15 @@ export default function ContentDetail() {
 
   const TypeIcon = () => {
     switch (item.type) {
-      case 'game': return <Gamepad2 className="w-6 h-6" />;
-      case 'book': return <Book className="w-6 h-6" />;
+      case 'game':  return <Gamepad2 className="w-6 h-6" />;
+      case 'book':  return <Book className="w-6 h-6" />;
       case 'movie': return <Film className="w-6 h-6" />;
     }
   };
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
-      <button 
+      <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-8 group"
       >
@@ -102,20 +121,20 @@ export default function ContentDetail() {
 
       <div className="grid md:grid-cols-[400px_1fr] gap-12">
         {/* Left: Image & Quick Stats */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className="space-y-6"
         >
           <div className="aspect-[2/3] rounded-3xl overflow-hidden glass-panel shadow-2xl">
-            <img 
-              src={item.image} 
-              alt={item.title} 
+            <img
+              src={item.image}
+              alt={item.title}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-4">
             <div className="glass-panel p-4 rounded-2xl text-center">
               <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Rating</p>
@@ -134,12 +153,12 @@ export default function ContentDetail() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <button 
+            <button
               onClick={toggleLibrary}
               disabled={isAdding}
               className={`w-full font-bold py-4 rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 ${
-                isInLibrary 
-                  ? 'bg-green-500/10 text-green-500 border border-green-500/20 hover:bg-green-500/20' 
+                isInLibrary
+                  ? 'bg-green-500/10 text-green-500 border border-green-500/20 hover:bg-green-500/20'
                   : 'bg-brand-500 hover:bg-brand-600 text-white shadow-brand-500/20'
               }`}
             >
@@ -165,7 +184,7 @@ export default function ContentDetail() {
         </motion.div>
 
         {/* Right: Details */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="space-y-8"
@@ -200,8 +219,8 @@ export default function ContentDetail() {
           <div className="space-y-4">
             <h3 className="text-xl font-bold font-display">About this {item.type}</h3>
             <p className="text-slate-400 leading-relaxed text-lg">
-              Experience a unique journey through {item.setting.toLowerCase()} landscapes. 
-              This {item.type} explores themes of {item.themes.join(', ').toLowerCase()}, 
+              Experience a unique journey through {item.setting.toLowerCase()} landscapes.
+              This {item.type} explores themes of {item.themes.join(', ').toLowerCase()},
               delivering a {item.tonality.toLowerCase()} atmosphere that resonates with {item.targetAudience.toLowerCase()}.
             </p>
           </div>
@@ -218,7 +237,9 @@ export default function ContentDetail() {
             <div className="space-y-2">
               <h4 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Details</h4>
               <div className="space-y-1">
-                <p className="text-slate-200"><span className="text-slate-500">Volume:</span> {item.volume}</p>
+                {item.volume && (
+                  <p className="text-slate-200"><span className="text-slate-500">Volume:</span> {item.volume}</p>
+                )}
                 {item.platform && (
                   <p className="text-slate-200"><span className="text-slate-500">Platforms:</span> {item.platform.join(', ')}</p>
                 )}
@@ -228,29 +249,31 @@ export default function ContentDetail() {
           </div>
 
           {/* Cross-Media Connections */}
-          <div className="pt-12">
-            <h3 className="text-2xl font-bold font-display mb-6">Cross-Media Connections</h3>
-            <div className="glass-panel p-6 rounded-3xl border-brand-500/20 bg-brand-500/5">
-              <p className="text-slate-300 italic mb-4">
-                "Because you enjoyed the {item.tonality.toLowerCase()} atmosphere and {item.setting.toLowerCase()} setting of {item.title}, 
-                Aura suggests exploring these related experiences..."
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {MOCK_DATA.filter(i => i.id !== item.id && (i.tonality === item.tonality || i.setting === item.setting)).slice(0, 3).map(related => (
-                  <div 
-                    key={related.id}
-                    onClick={() => navigate(`/content/${related.id}`)}
-                    className="cursor-pointer group"
-                  >
-                    <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2">
-                      <img src={related.image} alt={related.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+          {related.length > 0 && (
+            <div className="pt-12">
+              <h3 className="text-2xl font-bold font-display mb-6">Cross-Media Connections</h3>
+              <div className="glass-panel p-6 rounded-3xl border-brand-500/20 bg-brand-500/5">
+                <p className="text-slate-300 italic mb-4">
+                  "Because you enjoyed the {item.tonality.toLowerCase()} atmosphere and {item.setting.toLowerCase()} setting of {item.title},
+                  Aura suggests exploring these related experiences..."
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {related.map(r => (
+                    <div
+                      key={r.id}
+                      onClick={() => navigate(`/content/${r.id}`)}
+                      className="cursor-pointer group"
+                    >
+                      <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2">
+                        <img src={r.image} alt={r.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" referrerPolicy="no-referrer" />
+                      </div>
+                      <p className="text-xs font-bold truncate">{r.title}</p>
                     </div>
-                    <p className="text-xs font-bold truncate">{related.title}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </motion.div>
       </div>
     </div>

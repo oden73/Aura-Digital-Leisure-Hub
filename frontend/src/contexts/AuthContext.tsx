@@ -1,56 +1,76 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { LoadingScreen } from '../components/LoadingScreen';
+import {
+  apiLogin,
+  apiRegister,
+  apiProfile,
+  clearTokens,
+  getAccessToken,
+  ApiProfile,
+} from '../services/api';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  isAdmin: boolean;
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true, isAdmin: false });
+interface AuthContextType {
+  user: AuthUser | null;
+  loading: boolean;
+  isAdmin: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (username: string, email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  isAdmin: false,
+  login: async () => {},
+  register: async () => {},
+  logout: () => {},
+});
+
+function profileToUser(p: ApiProfile): AuthUser {
+  return { id: p.id, username: p.username, email: p.email };
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        // Check if user exists in Firestore, if not create
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp(),
-            role: 'user'
-          });
-        } else {
-          await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
-          setIsAdmin(userSnap.data().role === 'admin' || firebaseUser.email === 'karpuk.max1@gmail.com');
-        }
-        setUser(firebaseUser);
-      } else {
-        setUser(null);
-        setIsAdmin(false);
-      }
+    if (!getAccessToken()) {
       setLoading(false);
-    });
-
-    return unsubscribe;
+      return;
+    }
+    apiProfile()
+      .then(p => setUser(profileToUser(p)))
+      .catch(() => clearTokens())
+      .finally(() => setLoading(false));
   }, []);
 
+  const login = async (email: string, password: string) => {
+    await apiLogin(email, password);
+    const p = await apiProfile();
+    setUser(profileToUser(p));
+  };
+
+  const register = async (username: string, email: string, password: string) => {
+    await apiRegister(username, email, password);
+    const p = await apiProfile();
+    setUser(profileToUser(p));
+  };
+
+  const logout = () => {
+    clearTokens();
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: false, login, register, logout }}>
       {loading ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );

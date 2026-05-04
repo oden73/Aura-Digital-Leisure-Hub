@@ -1,55 +1,78 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MoodBar } from '../components/MoodBar';
 import { SearchBar } from '../components/SearchBar';
 import { ContentCard } from '../components/ContentCard';
-import { MOCK_DATA } from '../data';
 import { MediaItem, Mood } from '../types';
-import { processAIQuery } from '../services/aiService';
+import { apiSearch, mapApiItem } from '../services/api';
 
 export default function Home() {
   const [selectedMood, setSelectedMood] = useState<Mood | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredItems, setFilteredItems] = useState<MediaItem[]>(MOCK_DATA);
+  const [allItems, setAllItems] = useState<MediaItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const filter = async () => {
-      let items = [...MOCK_DATA];
-      if (selectedMood) {
-        items = items.filter(item => item.tonality === selectedMood);
-      }
-      if (searchQuery) {
-        setIsSearching(true);
-        const results = await processAIQuery(searchQuery, items);
-        setFilteredItems(results);
-        setIsSearching(false);
-      } else {
-        setFilteredItems(items);
-      }
-    };
-    filter();
-  }, [selectedMood, searchQuery]);
+    apiSearch('', 40)
+      .then(data => {
+        const mapped = data.map(mapApiItem);
+        setAllItems(mapped);
+        setFilteredItems(mapped);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (abortRef.current) abortRef.current.abort();
+
+    if (!searchQuery) {
+      const filtered = selectedMood
+        ? allItems.filter(i => i.tonality === selectedMood)
+        : allItems;
+      setFilteredItems(filtered);
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsSearching(true);
+
+    apiSearch(searchQuery, 20)
+      .then(data => {
+        if (controller.signal.aborted) return;
+        let mapped = data.map(mapApiItem);
+        if (selectedMood) mapped = mapped.filter(i => i.tonality === selectedMood);
+        setFilteredItems(mapped);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) setIsSearching(false);
+      });
+  }, [selectedMood, searchQuery, allItems]);
 
   const thematicRows = useMemo(() => {
-    const themes = Array.from(new Set(MOCK_DATA.flatMap(i => i.themes))).slice(0, 4);
-    return themes.map(theme => ({
-      title: `Exploring: ${theme}`,
-      items: filteredItems.filter(i => i.themes.includes(theme))
-    })).filter(row => row.items.length > 0);
+    const themes = Array.from(new Set(filteredItems.flatMap(i => i.themes))).slice(0, 4);
+    return themes
+      .map(theme => ({
+        title: `Exploring: ${theme}`,
+        items: filteredItems.filter(i => i.themes.includes(theme)),
+      }))
+      .filter(row => row.items.length > 0);
   }, [filteredItems]);
 
   return (
     <div className="space-y-12">
       <div className="text-center mb-12">
-        <motion.h2 
+        <motion.h2
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="font-display font-bold text-4xl md:text-6xl mb-6 tracking-tight"
         >
           Your Personal <span className="text-brand-500">Leisure Hub</span>
         </motion.h2>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -57,7 +80,7 @@ export default function Home() {
         >
           Stop searching, start experiencing. Aura bridges games, books, and movies through shared DNA.
         </motion.p>
-        
+
         <SearchBar onSearch={setSearchQuery} />
       </div>
 
@@ -118,7 +141,7 @@ export default function Home() {
         {!isSearching && filteredItems.length === 0 && (
           <div className="text-center py-20">
             <p className="text-slate-500 text-lg">No matches found for this vibe. Try exploring something else!</p>
-            <button 
+            <button
               onClick={() => { setSelectedMood(null); setSearchQuery(''); }}
               className="mt-4 text-brand-500 font-semibold hover:underline"
             >
