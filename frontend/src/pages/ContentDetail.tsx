@@ -11,6 +11,7 @@ import {
   apiSearch,
   mapApiItem,
   ApiItem,
+  ApiInteraction,
 } from '../services/api';
 import { MediaItem } from '../types';
 
@@ -21,8 +22,12 @@ export default function ContentDetail() {
 
   const [item, setItem] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [interaction, setInteraction] = useState<ApiInteraction | null>(null);
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [userRating, setUserRating] = useState<number>(0);
+  const [hoverRating, setHoverRating] = useState<number>(0);
+  const [isRating, setIsRating] = useState(false);
   const [related, setRelated] = useState<MediaItem[]>([]);
 
   useEffect(() => {
@@ -49,11 +54,12 @@ export default function ContentDetail() {
     if (!user || !id) return;
     apiGetLibrary()
       .then(interactions => {
-        setIsInLibrary(
-          interactions.some(
-            i => i.item_id === id && i.status && i.status !== 'dropped',
-          ),
-        );
+        const found = interactions.find(i => i.item_id === id);
+        if (found) {
+          setInteraction(found);
+          setIsInLibrary(found.status && found.status !== 'dropped');
+          setUserRating(found.rating ?? 0);
+        }
       })
       .catch(() => {});
   }, [user, id]);
@@ -89,6 +95,14 @@ export default function ContentDetail() {
     try {
       await apiUpdateInteraction(id, { status: wasInLibrary ? 'dropped' : 'planned' });
       setIsInLibrary(!wasInLibrary);
+      if (wasInLibrary) {
+        setInteraction(prev => prev ? { ...prev, status: 'dropped' } : null);
+      } else {
+        setInteraction(prev => prev
+          ? { ...prev, status: 'planned' }
+          : { id: 0, user_id: '', item_id: id, status: 'planned', is_favorite: false, updated_at: '' },
+        );
+      }
       toast.success(
         wasInLibrary
           ? `Removed "${item.title}" from your library`
@@ -101,6 +115,31 @@ export default function ContentDetail() {
     }
   };
 
+  const submitRating = async (stars: number) => {
+    if (!user) { navigate('/login'); return; }
+    if (!id) return;
+    setIsRating(true);
+    try {
+      if (!isInLibrary) {
+        await apiUpdateInteraction(id, { status: 'completed', rating: stars });
+        setIsInLibrary(true);
+        setInteraction(prev => prev
+          ? { ...prev, status: 'completed', rating: stars }
+          : { id: 0, user_id: '', item_id: id, status: 'completed', rating: stars, is_favorite: false, updated_at: '' },
+        );
+      } else {
+        await apiUpdateInteraction(id, { rating: stars });
+        setInteraction(prev => prev ? { ...prev, rating: stars } : null);
+      }
+      setUserRating(stars);
+      toast.success(`Rated "${item.title}" ${stars}/5`);
+    } catch {
+      toast.error('Failed to save rating');
+    } finally {
+      setIsRating(false);
+    }
+  };
+
   const TypeIcon = () => {
     switch (item.type) {
       case 'game':  return <Gamepad2 className="w-6 h-6" />;
@@ -108,6 +147,8 @@ export default function ContentDetail() {
       case 'movie': return <Film className="w-6 h-6" />;
     }
   };
+
+  const displayRating = hoverRating || userRating;
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -150,6 +191,44 @@ export default function ContentDetail() {
                 <span className="capitalize">{item.type}</span>
               </div>
             </div>
+          </div>
+
+          {/* User Rating */}
+          <div className="glass-panel p-4 rounded-2xl">
+            <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-3 text-center">Your Rating</p>
+            <div
+              className={`flex items-center justify-center gap-1 ${isRating ? 'opacity-50 pointer-events-none' : ''}`}
+              onMouseLeave={() => setHoverRating(0)}
+            >
+              {[1, 2, 3, 4, 5].map(star => (
+                <button
+                  key={star}
+                  onClick={() => submitRating(star)}
+                  onMouseEnter={() => setHoverRating(star)}
+                  className="p-1 transition-transform hover:scale-110"
+                  aria-label={`Rate ${star} stars`}
+                >
+                  <Star
+                    className={`w-7 h-7 transition-colors ${
+                      star <= displayRating
+                        ? 'text-yellow-400 fill-yellow-400'
+                        : 'text-slate-600'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            {userRating > 0 && (
+              <p className="text-center text-xs text-slate-500 mt-2">{userRating}/5</p>
+            )}
+            {!user && (
+              <p className="text-center text-xs text-slate-500 mt-2">
+                <button onClick={() => navigate('/login')} className="text-brand-500 hover:underline">
+                  Sign in
+                </button>{' '}
+                to rate
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">
@@ -205,6 +284,13 @@ export default function ContentDetail() {
                   </span>
                 ))}
               </div>
+              {interaction && interaction.status && interaction.status !== 'dropped' && (
+                <div className="mt-3">
+                  <span className="px-3 py-1 rounded-full bg-green-500/10 text-green-400 text-xs font-bold border border-green-500/20 uppercase tracking-wider">
+                    {interaction.status}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <button className="p-3 rounded-xl glass-panel hover:bg-white/10 transition-colors text-slate-400 hover:text-red-500">

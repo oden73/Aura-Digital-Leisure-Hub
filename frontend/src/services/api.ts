@@ -115,22 +115,24 @@ export interface ApiItem {
   };
 }
 
-export function mapApiItem(item: ApiItem): MediaItem {
+export function mapApiItem(item: ApiItem & { match_score?: number; match_reason?: string }): MediaItem {
   return {
     id: item.id,
     type: item.media_type === 'cinema' ? 'movie' : item.media_type,
     title: item.title,
     image: item.cover_image_url || `https://picsum.photos/seed/${encodeURIComponent(item.id)}/400/600`,
-    genre: item.criteria.genre
+    genre: item.criteria?.genre
       ? item.criteria.genre.split(',').map(s => s.trim()).filter(Boolean)
       : [],
-    setting: item.criteria.setting ?? '',
-    themes: item.criteria.themes
+    setting: item.criteria?.setting ?? '',
+    themes: item.criteria?.themes
       ? item.criteria.themes.split(',').map(s => s.trim()).filter(Boolean)
       : [],
-    tonality: item.criteria.tonality ?? '',
-    targetAudience: item.criteria.target_audience ?? '',
+    tonality: item.criteria?.tonality ?? '',
+    targetAudience: item.criteria?.target_audience ?? '',
     rating: item.average_rating,
+    matchScore: item.match_score,
+    matchReason: item.match_reason,
   };
 }
 
@@ -191,4 +193,39 @@ export async function apiUpdateInteraction(
     body: JSON.stringify({ item_id: itemId, data }),
   });
   if (!res.ok) throw new Error('Failed to update interaction');
+}
+
+// ---- Recommendations ----
+
+export interface ApiRecommendationItem extends ApiItem {
+  match_score?: number;
+  match_reason?: string;
+}
+
+export async function apiGetRecommendations(limit = 20): Promise<ApiRecommendationItem[]> {
+  const res = await apiFetch('/v1/recommendations', {
+    method: 'POST',
+    body: JSON.stringify({ limit }),
+  });
+  if (!res.ok) return [];
+  const raw = await res.json();
+  const items: ApiRecommendationItem[] = Array.isArray(raw)
+    ? raw
+    : (raw.items ?? raw.recommendations ?? []);
+
+  const needsEnrich = items.filter(i => !i.cover_image_url || !i.criteria?.tonality);
+  if (needsEnrich.length > 0) {
+    await Promise.allSettled(
+      needsEnrich.map(async i => {
+        try {
+          const full = await apiGetContent(i.id);
+          if (!i.cover_image_url) i.cover_image_url = full.cover_image_url;
+          if (!i.criteria) i.criteria = {};
+          if (!i.criteria.tonality) i.criteria.tonality = full.criteria?.tonality;
+        } catch { /* ignore */ }
+      }),
+    );
+  }
+
+  return items;
 }

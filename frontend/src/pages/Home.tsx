@@ -1,15 +1,20 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Sparkles } from 'lucide-react';
 import { MoodBar } from '../components/MoodBar';
 import { SearchBar } from '../components/SearchBar';
 import { ContentCard } from '../components/ContentCard';
 import { MediaItem, Mood } from '../types';
-import { apiSearch, mapApiItem } from '../services/api';
+import { apiSearch, apiGetRecommendations, mapApiItem } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Home() {
+  const { user } = useAuth();
   const [selectedMood, setSelectedMood] = useState<Mood | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [allItems, setAllItems] = useState<MediaItem[]>([]);
+  const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
   const [filteredItems, setFilteredItems] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -23,6 +28,15 @@ export default function Home() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user) { setRecommendations([]); return; }
+    setLoadingRecs(true);
+    apiGetRecommendations(10)
+      .then(data => setRecommendations(data.map(mapApiItem)))
+      .catch(() => {})
+      .finally(() => setLoadingRecs(false));
+  }, [user]);
 
   useEffect(() => {
     if (abortRef.current) abortRef.current.abort();
@@ -51,6 +65,11 @@ export default function Home() {
         if (!controller.signal.aborted) setIsSearching(false);
       });
   }, [selectedMood, searchQuery, allItems]);
+
+  const displayedRecommendations = useMemo(() => {
+    if (!selectedMood) return recommendations;
+    return recommendations.filter(i => i.tonality === selectedMood);
+  }, [recommendations, selectedMood]);
 
   const thematicRows = useMemo(() => {
     const themes = Array.from(new Set(filteredItems.flatMap(i => i.themes))).slice(0, 4);
@@ -108,9 +127,41 @@ export default function Home() {
               </section>
             ) : (
               <div key="discovery-feed" className="space-y-16">
+                {user && (
+                  <section>
+                    <div className="flex items-center justify-between mb-8">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                          <Sparkles className="w-4 h-4 text-brand-500" />
+                        </div>
+                        <h3 className="font-display font-bold text-2xl">Recommended for You</h3>
+                      </div>
+                    </div>
+                    {loadingRecs ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {[...Array(5)].map((_, i) => (
+                          <div key={i} className="aspect-[2/3] rounded-2xl bg-white/5 animate-pulse" />
+                        ))}
+                      </div>
+                    ) : displayedRecommendations.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {displayedRecommendations.map((item) => (
+                          <ContentCard key={item.id} item={item} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="glass-panel rounded-2xl p-8 text-center text-slate-500">
+                        No recommendations match this mood yet — keep exploring!
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 <section>
                   <div className="flex items-center justify-between mb-8">
-                    <h3 className="font-display font-bold text-2xl">Recommended for You</h3>
+                    <h3 className="font-display font-bold text-2xl">
+                      {user ? 'Discover More' : 'Recommended for You'}
+                    </h3>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                     {filteredItems.slice(0, 5).map((item) => (
@@ -138,7 +189,7 @@ export default function Home() {
           </AnimatePresence>
         )}
 
-        {!isSearching && filteredItems.length === 0 && (
+        {!isSearching && filteredItems.length === 0 && !user && (
           <div className="text-center py-20">
             <p className="text-slate-500 text-lg">No matches found for this vibe. Try exploring something else!</p>
             <button
