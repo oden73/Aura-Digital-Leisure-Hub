@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"aura/backend/core-go/internal/domain/entities"
+	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
 	"aura/backend/core-go/internal/usecase"
 )
 
@@ -22,6 +23,7 @@ type Handlers struct {
 	LibraryItems        usecase.ListLibraryItemsUseCase
 	LinkExternalAccount usecase.LinkExternalAccountUseCase
 	Auth                *AuthHandlers
+	AIClient            ai_engine.Client
 	Users               interface {
 		GetByID(userID string) (entities.User, error)
 	}
@@ -286,4 +288,55 @@ type profileResponse struct {
 	Username  string `json:"username"`
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
+}
+
+type assistantChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type assistantChatRequest struct {
+	Message string                 `json:"message"`
+	History []assistantChatMessage `json:"history"`
+}
+
+type assistantChatResponse struct {
+	Text              string   `json:"text"`
+	RecommendationIDs []string `json:"recommendation_ids"`
+}
+
+// HandleAssistantChat serves POST /v1/assistant — proxies to the AI engine chat endpoint.
+func (h *Handlers) HandleAssistantChat(w http.ResponseWriter, r *http.Request) {
+	if h.AIClient == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "AI assistant is not configured")
+		return
+	}
+	var req assistantChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", "Invalid JSON body")
+		return
+	}
+	if req.Message == "" {
+		writeError(w, http.StatusBadRequest, "missing_message", "message is required")
+		return
+	}
+
+	history := make([]ai_engine.ChatMessage, 0, len(req.History))
+	for _, m := range req.History {
+		history = append(history, ai_engine.ChatMessage{Role: m.Role, Content: m.Content})
+	}
+
+	result, err := h.AIClient.Chat(ai_engine.ChatRequest{Message: req.Message, History: history})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "ai_error", "AI assistant error")
+		return
+	}
+	ids := result.RecommendationIDs
+	if ids == nil {
+		ids = []string{}
+	}
+	writeJSON(w, http.StatusOK, assistantChatResponse{
+		Text:              result.Text,
+		RecommendationIDs: ids,
+	})
 }

@@ -31,6 +31,10 @@ class Settings(BaseModel):
     cb_default_limit: int = 20
     cb_per_seed_neighbors: int = 50
 
+    # OpenRouter LLM settings.
+    openrouter_api_key: str = ""
+    openrouter_model: str = "deepseek/deepseek-chat-v3-0324:free"
+
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
@@ -51,6 +55,10 @@ class Settings(BaseModel):
                 os.getenv(
                     "CB_PER_SEED_NEIGHBORS", cls.model_fields["cb_per_seed_neighbors"].default
                 )
+            ),
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
+            openrouter_model=os.getenv(
+                "OPENROUTER_MODEL", cls.model_fields["openrouter_model"].default
             ),
         )
 

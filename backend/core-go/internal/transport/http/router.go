@@ -59,6 +59,7 @@ func NewRouter(h *handlers.Handlers, opts RouterOptions) http.Handler {
 	mux.HandleFunc("POST /v1/sync/external", handlers.Auth(h.Auth.Auth.Tokens, h.HandleSyncExternal))
 	mux.HandleFunc("POST /v1/external-accounts", handlers.Auth(h.Auth.Auth.Tokens, h.HandleLinkExternalAccount))
 	mux.HandleFunc("GET /v1/profile", handlers.Auth(h.Auth.Auth.Tokens, h.HandleGetProfile))
+	mux.HandleFunc("POST /v1/assistant", handlers.Auth(h.Auth.Auth.Tokens, h.HandleAssistantChat))
 
 	var chain http.Handler = mux
 	chain = handlers.Recover(chain)

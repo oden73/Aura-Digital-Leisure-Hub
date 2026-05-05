@@ -147,6 +147,69 @@ func (c *HTTPClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (strin
 	return "", nil
 }
 
+type chatRequestPayload struct {
+	Message string        `json:"message"`
+	History []ChatMessage `json:"history"`
+}
+
+type chatResponsePayload struct {
+	Text              string   `json:"text"`
+	RecommendationIDs []string `json:"recommendation_ids"`
+}
+
+// Chat sends POST /v1/assistant/chat to the AI engine and returns the LLM reply.
+func (c *HTTPClient) Chat(req ChatRequest) (ChatResponse, error) {
+	out, err := c.chat(req)
+	c.recordCall("chat", err)
+	return out, err
+}
+
+func (c *HTTPClient) chat(req ChatRequest) (ChatResponse, error) {
+	history := req.History
+	if history == nil {
+		history = []ChatMessage{}
+	}
+	body, err := json.Marshal(chatRequestPayload{Message: req.Message, History: history})
+	if err != nil {
+		return ChatResponse{}, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		c.BaseURL+"/v1/assistant/chat",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return ChatResponse{}, fmt.Errorf("ai engine: status=%d body=%s", resp.StatusCode, string(raw))
+	}
+
+	var decoded chatResponsePayload
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return ChatResponse{}, err
+	}
+	ids := decoded.RecommendationIDs
+	if ids == nil {
+		ids = []string{}
+	}
+	return ChatResponse{Text: decoded.Text, RecommendationIDs: ids}, nil
+}
+
 type embeddingRequestPayload struct {
 	ItemID string `json:"item_id"`
 	Text   string `json:"text"`

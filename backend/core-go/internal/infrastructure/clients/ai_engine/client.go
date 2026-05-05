@@ -24,14 +24,34 @@ type EmbeddingRequest struct {
 	Text   string
 }
 
+// ChatMessage is a single turn in a conversation history.
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatRequest carries a user message and optional prior turns.
+type ChatRequest struct {
+	Message string        `json:"message"`
+	History []ChatMessage `json:"history"`
+}
+
+// ChatResponse holds the assistant reply and optional item IDs.
+type ChatResponse struct {
+	Text              string   `json:"text"`
+	RecommendationIDs []string `json:"recommendation_ids"`
+}
+
 // Client is the abstraction the hybrid orchestrator uses to talk to the AI
 // engine. ComputeCB returns the CB scores plus an optional reasoning string
 // produced by the LLM. GenerateEmbedding pushes an item's text into the
-// vector store so subsequent CB queries can find it.
+// vector store so subsequent CB queries can find it. Chat invokes the LLM
+// assistant for conversational recommendations.
 type Client interface {
 	ComputeCB(req Request) (Response, error)
 	GenerateReasoning(userID string, items []entities.ScoredItem) (string, error)
 	GenerateEmbedding(req EmbeddingRequest) error
+	Chat(req ChatRequest) (ChatResponse, error)
 }
 
 // StubClient is a no-op client used when the AI engine is unreachable; it
@@ -45,3 +65,5 @@ func (StubClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (string, 
 }
 
 func (StubClient) GenerateEmbedding(_ EmbeddingRequest) error { return nil }
+
+func (StubClient) Chat(_ ChatRequest) (ChatResponse, error) { return ChatResponse{}, nil }

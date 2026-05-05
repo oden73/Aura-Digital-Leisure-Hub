@@ -126,6 +126,7 @@ func Run() error {
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
 	h.Auth = authHandlers
+	h.AIClient = aiClient
 	h.Users = userRepo
 	h.GetContent = getContentUC
 	h.UpsertContent = upsertContentUC
