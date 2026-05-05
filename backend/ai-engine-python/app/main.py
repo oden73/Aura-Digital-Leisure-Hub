@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.routes import embeddings, recommendations
+from app.api.routes import assistant, embeddings, recommendations
 
 
 def create_app() -> FastAPI:
@@ -13,6 +13,7 @@ def create_app() -> FastAPI:
 
     app.include_router(recommendations.router, prefix="/v1")
     app.include_router(embeddings.router, prefix="/v1")
+    app.include_router(assistant.router, prefix="/v1")
     return app
 
 

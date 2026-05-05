@@ -2,10 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Bot, User, Trash2 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { apiFetch } from '../services/api';
 import { MOCK_DATA } from '../data';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface Message {
   id: string;
@@ -53,34 +51,23 @@ export default function AIAssistant() {
     setIsTyping(true);
 
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `
-          You are Aura, an expert cross-media curator. You help users find connections between games, books, and movies.
-          
-          Catalog Data:
-          ${JSON.stringify(MOCK_DATA.map(i => ({ id: i.id, title: i.title, type: i.type, tonality: i.tonality, themes: i.themes })), null, 2)}
-          
-          User Query: "${input}"
-          
-          Respond in JSON format:
-          {
-            "text": "Your conversational response explaining the connections and why you recommend these items.",
-            "recommendationIds": ["list", "of", "matching", "ids", "from", "catalog"]
-          }
-        `,
-        config: {
-          responseMimeType: "application/json"
-        }
+      const history = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const res = await apiFetch('/v1/assistant', {
+        method: 'POST',
+        body: JSON.stringify({ message: input, history }),
       });
 
-      const result = JSON.parse(response.text || '{}');
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const result: { text: string; recommendation_ids: string[] } = await res.json();
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: result.text || "I found some interesting connections for you.",
-        recommendations: result.recommendationIds,
+        recommendations: result.recommendation_ids,
         timestamp: new Date()
       };
 

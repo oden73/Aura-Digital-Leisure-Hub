@@ -23,6 +23,9 @@ func (r *recorder) GenerateEmbedding(req ai_engine.EmbeddingRequest) error {
 	r.calls = append(r.calls, req)
 	return r.err
 }
+func (r *recorder) Chat(_ ai_engine.ChatRequest) (ai_engine.ChatResponse, error) {
+	return ai_engine.ChatResponse{}, nil
+}
 
 func TestBuildText_ConcatenatesDescriptiveFields(t *testing.T) {
 	item := entities.Item{

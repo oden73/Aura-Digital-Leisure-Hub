@@ -31,6 +31,9 @@ func (stubAIClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (string
 	return "", nil
 }
 func (stubAIClient) GenerateEmbedding(_ ai_engine.EmbeddingRequest) error { return nil }
+func (stubAIClient) Chat(_ ai_engine.ChatRequest) (ai_engine.ChatResponse, error) {
+	return ai_engine.ChatResponse{}, nil
+}
 
 type captureRule struct {
 	captured RankingContext
