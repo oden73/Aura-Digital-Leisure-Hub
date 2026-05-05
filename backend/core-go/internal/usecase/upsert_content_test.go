@@ -41,6 +41,9 @@ func (f *fakeAIClient) GenerateEmbedding(req ai_engine.EmbeddingRequest) error {
 	f.embedCalls = append(f.embedCalls, req)
 	return f.embedErr
 }
+func (f *fakeAIClient) Chat(_ ai_engine.ChatRequest) (ai_engine.ChatResponse, error) {
+	return ai_engine.ChatResponse{}, nil
+}
 
 func TestUpsertContent_TriggersEmbeddingPublish(t *testing.T) {
 	saver := &fakeMetadataSaver{}
