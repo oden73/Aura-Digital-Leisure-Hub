@@ -30,6 +30,8 @@ pnpm-debug.log*
 *.key
 secrets/
 service-account*.json
+firebase-applet-config.json
+firebase*.json
 
 # ===== Node / Frontend =====
 node_modules/
@@ -73,3 +75,6 @@ docker-compose.*.local.yml
 tmp/
 .tmp/
 *.local
+
+# ===== Other =====
+docs/demo.md

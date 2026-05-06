@@ -1,0 +1,69 @@
+# fly.toml — Aura Go core API on Fly.io
+#
+# Deploy:
+#   fly auth login
+#   fly apps create aura-core          # first time only
+#   fly secrets set JWT_SECRET=... STEAM_API_KEY=... DATABASE_URL=...
+#   fly deploy --config fly.toml
+#
+# The AI engine (Python) is a heavy image; run it as a separate Fly app
+# or on a VPS and point AI_ENGINE_URL to its public address.
+
+app = "aura-core"
+primary_region = "ams"
+
+[build]
+  dockerfile = "backend/core-go/Dockerfile"
+  build_target = "production"
+
+[env]
+  APP_ENV            = "production"
+  LOG_LEVEL          = "info"
+  CORE_GO_PORT       = "8080"
+  AI_ENGINE_TIMEOUT_MS = "2000"
+  RATE_LIMIT_RPS     = "20"
+  RATE_LIMIT_BURST   = "40"
+  SHUTDOWN_TIMEOUT_SECONDS = "15"
+  SIMILARITY_CACHE_TTL_SECONDS = "1800"
+  USER_SIMILARITY_CACHE_MAX    = "100000"
+  ITEM_SIMILARITY_CACHE_MAX    = "50000"
+
+# Secrets (set via `fly secrets set`, never committed):
+#   JWT_SECRET
+#   DATABASE_URL       (Fly Postgres attachment or external URL)
+#   STEAM_API_KEY
+#   AI_ENGINE_URL      (URL of the Python AI engine)
+#   CORS_ALLOWED_ORIGINS (e.g. https://your-app.vercel.app)
+
+[[services]]
+  internal_port = 8080
+  protocol      = "tcp"
+
+  [[services.ports]]
+    port     = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port     = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type       = "connections"
+    hard_limit = 500
+    soft_limit = 400
+
+  [[services.tcp_checks]]
+    interval    = "10s"
+    timeout     = "2s"
+    grace_period = "10s"
+
+  [[services.http_checks]]
+    interval    = "15s"
+    timeout     = "5s"
+    grace_period = "20s"
+    method      = "GET"
+    path        = "/health"
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "256mb"
