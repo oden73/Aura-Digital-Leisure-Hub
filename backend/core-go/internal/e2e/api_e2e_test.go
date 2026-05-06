@@ -153,6 +153,7 @@ func TestE2E_ProtectedRoutes_RequireBearerToken(t *testing.T) {
 		method, path, body string
 	}{
 		{http.MethodGet, "/v1/profile", ""},
+		{http.MethodGet, "/v1/profile/stats", ""},
 		{http.MethodGet, "/v1/library", ""},
 		{http.MethodGet, "/v1/library/items", ""},
 		{http.MethodPut, "/v1/interactions", `{"item_id":"x","data":{}}`},
@@ -362,6 +363,131 @@ func TestE2E_Recommendations_ColdStartFallback(t *testing.T) {
 	if len(rec.Items) == 0 {
 		t.Fatal("expected cold-start fallback to surface popular items, got 0")
 	}
+	for _, it := range rec.Items {
+		if id, _ := it["item_id"].(string); id == "" {
+			t.Fatalf("recommendation missing item_id: %v", it)
+		}
+	}
+}
+
+func TestE2E_ProfileStats_EmptyAndAfterInteraction(t *testing.T) {
+	env := setup(t)
+	tokens := env.register("hana", "hana@example.com", "x")
+
+	// Fresh user → empty stats (zero values).
+	resp := env.do(http.MethodGet, "/v1/profile/stats", nil, tokens.Access)
+	env.requireStatus(resp, http.StatusOK)
+	var stats struct {
+		TotalInteractions int     `json:"total_interactions"`
+		RatedCount        int     `json:"rated_count"`
+		AvgRating         float64 `json:"avg_rating"`
+		FavoriteCount     int     `json:"favorite_count"`
+		CompletedCount    int     `json:"completed_count"`
+		ByMediaType       []any   `json:"by_media_type"`
+	}
+	env.decode(resp, &stats)
+	if stats.TotalInteractions != 0 {
+		t.Fatalf("expected zero stats for new user, got %+v", stats)
+	}
+	if stats.ByMediaType == nil {
+		t.Fatal("by_media_type should be [] not null")
+	}
+
+	// Seed item + add interaction.
+	resp = env.do(http.MethodPost, "/v1/content", map[string]any{
+		"title": "Dune", "media_type": "book", "average_rating": 9.0,
+	}, tokens.Access)
+	env.requireStatus(resp, http.StatusNoContent)
+	resp.Body.Close()
+
+	resp = env.do(http.MethodGet, "/v1/search?q=Dune&limit=1", nil, "")
+	env.requireStatus(resp, http.StatusOK)
+	var hits []struct{ ID string `json:"id"` }
+	env.decode(resp, &hits)
+	if len(hits) == 0 {
+		t.Fatal("Dune not found in search")
+	}
+
+	resp = env.do(http.MethodPut, "/v1/interactions", map[string]any{
+		"item_id": hits[0].ID,
+		"data":    map[string]any{"status": "completed", "rating": 9, "is_favorite": true},
+	}, tokens.Access)
+	env.requireStatus(resp, http.StatusNoContent)
+	resp.Body.Close()
+
+	// Stats should now reflect the interaction.
+	resp = env.do(http.MethodGet, "/v1/profile/stats", nil, tokens.Access)
+	env.requireStatus(resp, http.StatusOK)
+	var stats2 struct {
+		TotalInteractions int     `json:"total_interactions"`
+		RatedCount        int     `json:"rated_count"`
+		AvgRating         float64 `json:"avg_rating"`
+		FavoriteCount     int     `json:"favorite_count"`
+		CompletedCount    int     `json:"completed_count"`
+		ByMediaType       []struct {
+			MediaType string  `json:"media_type"`
+			Total     int     `json:"total"`
+			Rated     int     `json:"rated"`
+			AvgRating float64 `json:"avg_rating"`
+			Favorites int     `json:"favorites"`
+			Completed int     `json:"completed"`
+		} `json:"by_media_type"`
+	}
+	env.decode(resp, &stats2)
+	if stats2.TotalInteractions != 1 {
+		t.Fatalf("expected 1 total, got %+v", stats2)
+	}
+	if stats2.RatedCount != 1 {
+		t.Fatalf("expected 1 rated, got %+v", stats2)
+	}
+	if stats2.FavoriteCount != 1 {
+		t.Fatalf("expected 1 favorite, got %+v", stats2)
+	}
+	if stats2.CompletedCount != 1 {
+		t.Fatalf("expected 1 completed, got %+v", stats2)
+	}
+	if len(stats2.ByMediaType) != 1 || stats2.ByMediaType[0].MediaType != "book" {
+		t.Fatalf("expected book row in by_media_type, got %+v", stats2.ByMediaType)
+	}
+}
+
+func TestE2E_ProfileStats_RequiresAuth(t *testing.T) {
+	env := setup(t)
+	resp := env.do(http.MethodGet, "/v1/profile/stats", nil, "")
+	env.requireStatus(resp, http.StatusUnauthorized)
+	resp.Body.Close()
+}
+
+func TestE2E_Recommendations_MoodFilter(t *testing.T) {
+	env := setup(t)
+	tokens := env.register("irene", "irene@example.com", "x")
+
+	// Seed two items: one dark, one light tonality.
+	darkBody := map[string]any{
+		"title": "Dark Item", "media_type": "book",
+		"average_rating": 8.0,
+		"criteria":       map[string]string{"tonality": "dark"},
+	}
+	lightBody := map[string]any{
+		"title": "Light Item", "media_type": "book",
+		"average_rating": 8.0,
+		"criteria":       map[string]string{"tonality": "light"},
+	}
+	for _, b := range []map[string]any{darkBody, lightBody} {
+		resp := env.do(http.MethodPost, "/v1/content", b, tokens.Access)
+		env.requireStatus(resp, http.StatusNoContent)
+		resp.Body.Close()
+	}
+
+	// Request recommendations filtered by mood=dark.
+	resp := env.do(http.MethodPost, "/v1/recommendations", map[string]any{
+		"filters": map[string]any{"moods": []string{"dark"}},
+	}, tokens.Access)
+	env.requireStatus(resp, http.StatusOK)
+	var rec struct {
+		Items []map[string]any `json:"items"`
+	}
+	env.decode(resp, &rec)
 	for _, it := range rec.Items {
 		if id, _ := it["item_id"].(string); id == "" {
 			t.Fatalf("recommendation missing item_id: %v", it)

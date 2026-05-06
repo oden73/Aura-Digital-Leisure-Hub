@@ -170,6 +170,62 @@ func (r *UserRepo) GetProfile(userID string) (entities.UserProfile, error) {
 	return profile, nil
 }
 
+// GetStats returns aggregated interaction stats for the given user.
+// A single SQL GROUP BY query covers all media types at once so we only
+// pay one round-trip regardless of how many types exist.
+func (r *UserRepo) GetStats(userID string) (entities.UserStats, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := r.DB.Query(ctx, `
+		SELECT
+			bi.media_type::text                                               AS media_type,
+			COUNT(*)::int                                                     AS total,
+			COUNT(*) FILTER (WHERE ui.rating IS NOT NULL)::int               AS rated,
+			COALESCE(AVG(ui.rating) FILTER (WHERE ui.rating IS NOT NULL), 0)::float8 AS avg_rating,
+			COUNT(*) FILTER (WHERE ui.is_favorite)::int                      AS favorites,
+			COUNT(*) FILTER (WHERE ui.status = 'completed')::int             AS completed
+		FROM user_interactions ui
+		JOIN base_items bi ON bi.item_id = ui.item_id
+		WHERE ui.user_id = $1
+		GROUP BY bi.media_type
+		ORDER BY bi.media_type
+	`, userID)
+	if err != nil {
+		return entities.UserStats{}, err
+	}
+	defer rows.Close()
+
+	var stats entities.UserStats
+	for rows.Next() {
+		var row entities.MediaTypeStats
+		if err := rows.Scan(&row.MediaType, &row.Total, &row.Rated, &row.AvgRating, &row.Favorites, &row.Completed); err != nil {
+			return entities.UserStats{}, err
+		}
+		stats.TotalInteractions += row.Total
+		stats.RatedCount += row.Rated
+		stats.FavoriteCount += row.Favorites
+		stats.CompletedCount += row.Completed
+		stats.ByMediaType = append(stats.ByMediaType, row)
+	}
+	if err := rows.Err(); err != nil {
+		return entities.UserStats{}, err
+	}
+
+	if stats.RatedCount > 0 {
+		var weightedSum float64
+		for _, row := range stats.ByMediaType {
+			weightedSum += row.AvgRating * float64(row.Rated)
+		}
+		stats.AvgRating = weightedSum / float64(stats.RatedCount)
+	}
+
+	if stats.ByMediaType == nil {
+		stats.ByMediaType = []entities.MediaTypeStats{}
+	}
+	return stats, nil
+}
+
 // LinkExternalAccount upserts the (user_id, service_name, external_user_id)
 // triple into external_accounts. The (service_name, external_user_id) tuple
 // is globally unique per the schema, so re-linking the same external profile

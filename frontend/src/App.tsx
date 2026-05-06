@@ -10,6 +10,7 @@ import Register from './pages/Register';
 import ContentDetail from './pages/ContentDetail';
 import Library from './pages/Library';
 import AIAssistant from './pages/AIAssistant';
+import Stats from './pages/Stats';
 import NotFound from './pages/NotFound';
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="library" element={<Library />} />
                 <Route path="assistant" element={<AIAssistant />} />
+                <Route path="stats" element={<Stats />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Route>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Sparkles, Info, User, LogIn, LogOut } from 'lucide-react';
+import { Sparkles, Info, BarChart2, LogIn, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -109,16 +109,19 @@ export const Layout: React.FC = () => {
             AI Assistant
           </Link>
           {user ? (
-            <button className="text-slate-400 font-bold text-sm hover:text-slate-200 transition-colors flex items-center gap-2">
-              <User className="w-4 h-4" />
-              Profile
-            </button>
+            <Link
+              to="/stats"
+              className={`text-sm font-bold transition-colors flex items-center gap-1.5 ${location.pathname === '/stats' ? 'text-brand-500' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              <BarChart2 className="w-4 h-4" />
+              Stats
+            </Link>
           ) : (
             <Link
               to="/login"
-              className="text-slate-400 font-bold text-sm hover:text-slate-200 transition-colors flex items-center gap-2"
+              className="text-slate-400 font-bold text-sm hover:text-slate-200 transition-colors flex items-center gap-1.5"
             >
-              <User className="w-4 h-4" />
+              <LogIn className="w-4 h-4" />
               Sign In
             </Link>
           )}

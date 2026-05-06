@@ -20,4 +20,7 @@ type RecommendationFilters struct {
 	MediaTypes    []MediaType `json:"media_types,omitempty"`
 	ReleasePeriod DateRange   `json:"release_period,omitempty"`
 	RatingRange   RatingRange `json:"rating_range,omitempty"`
+	// Moods filters by tonality/mood (e.g. "Dark", "Light", "Epic").
+	// Values are matched case-insensitively against Item.Criteria.Tonality.
+	Moods []string `json:"moods,omitempty"`
 }

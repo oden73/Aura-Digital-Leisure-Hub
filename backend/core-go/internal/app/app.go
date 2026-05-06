@@ -122,6 +122,7 @@ func Run() error {
 	libraryItemsUC := usecase.NewListLibraryItems(interactionRepo)
 	syncUC := usecase.NewSyncExternalContent(adapters, metadataRepo, embeddingPublisher)
 	linkExternalUC := usecase.NewLinkExternalAccount(userRepo)
+	statsUC := usecase.NewGetUserStats(userRepo)
 
 	// HTTP transport.
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
@@ -133,6 +134,7 @@ func Run() error {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
+	h.Stats = statsUC
 	healthHandler := handlers.HealthHandler(2*time.Second,
 		handlers.CheckerFunc{
 			NameValue: "database",

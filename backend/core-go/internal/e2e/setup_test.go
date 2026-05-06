@@ -121,6 +121,8 @@ func setup(t *testing.T) *testEnv {
 	syncUC := usecase.NewSyncExternalContent(nil, metadataRepo, embeddingPublisher)
 	linkExternalUC := usecase.NewLinkExternalAccount(userRepo)
 
+	statsUC := usecase.NewGetUserStats(userRepo)
+
 	h := handlers.New(getRecs, searchUC, updateUC, syncUC)
 	h.Auth = authHandlers
 	h.Users = userRepo
@@ -129,6 +131,7 @@ func setup(t *testing.T) *testEnv {
 	h.Library = libraryUC
 	h.LibraryItems = libraryItemsUC
 	h.LinkExternalAccount = linkExternalUC
+	h.Stats = statsUC
 
 	router := httptransport.NewRouter(h, httptransport.RouterOptions{})
 	srv := httptest.NewServer(router)

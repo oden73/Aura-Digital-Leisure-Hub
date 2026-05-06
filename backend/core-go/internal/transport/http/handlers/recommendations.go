@@ -22,6 +22,7 @@ type Handlers struct {
 	Library             usecase.ListLibraryUseCase
 	LibraryItems        usecase.ListLibraryItemsUseCase
 	LinkExternalAccount usecase.LinkExternalAccountUseCase
+	Stats               *usecase.GetUserStats
 	Auth                *AuthHandlers
 	AIClient            ai_engine.Client
 	Users               interface {
@@ -288,6 +289,25 @@ type profileResponse struct {
 	Username  string `json:"username"`
 	Email     string `json:"email"`
 	CreatedAt string `json:"created_at"`
+}
+
+// HandleGetStats serves GET /v1/profile/stats.
+func (h *Handlers) HandleGetStats(w http.ResponseWriter, r *http.Request) {
+	uid, ok := userIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "Unauthorized")
+		return
+	}
+	if h.Stats == nil {
+		writeError(w, http.StatusServiceUnavailable, "not_configured", "Stats not configured")
+		return
+	}
+	stats, err := h.Stats.Execute(uid)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 type assistantChatMessage struct {

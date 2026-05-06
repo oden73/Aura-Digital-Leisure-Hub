@@ -32,11 +32,12 @@ export default function Home() {
   useEffect(() => {
     if (!user) { setRecommendations([]); return; }
     setLoadingRecs(true);
-    apiGetRecommendations(10)
+    const moods = selectedMood ? [selectedMood.toLowerCase()] : undefined;
+    apiGetRecommendations(20, moods)
       .then(data => setRecommendations(data.map(mapApiItem)))
       .catch(() => {})
       .finally(() => setLoadingRecs(false));
-  }, [user]);
+  }, [user, selectedMood]);
 
   useEffect(() => {
     if (abortRef.current) abortRef.current.abort();
@@ -66,10 +67,7 @@ export default function Home() {
       });
   }, [selectedMood, searchQuery, allItems]);
 
-  const displayedRecommendations = useMemo(() => {
-    if (!selectedMood) return recommendations;
-    return recommendations.filter(i => i.tonality === selectedMood);
-  }, [recommendations, selectedMood]);
+  const displayedRecommendations = recommendations;
 
   const thematicRows = useMemo(() => {
     const themes = Array.from(new Set(filteredItems.flatMap(i => i.themes))).slice(0, 4);

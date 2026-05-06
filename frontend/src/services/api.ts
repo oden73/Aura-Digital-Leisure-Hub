@@ -195,6 +195,32 @@ export async function apiUpdateInteraction(
   if (!res.ok) throw new Error('Failed to update interaction');
 }
 
+// ---- Stats ----
+
+export interface ApiMediaTypeStats {
+  media_type: string;
+  total: number;
+  rated: number;
+  avg_rating: number;
+  favorites: number;
+  completed: number;
+}
+
+export interface ApiUserStats {
+  total_interactions: number;
+  rated_count: number;
+  avg_rating: number;
+  favorite_count: number;
+  completed_count: number;
+  by_media_type: ApiMediaTypeStats[];
+}
+
+export async function apiGetStats(): Promise<ApiUserStats> {
+  const res = await apiFetch('/v1/profile/stats');
+  if (!res.ok) throw new Error('Failed to fetch stats');
+  return res.json();
+}
+
 // ---- Recommendations ----
 
 export interface ApiRecommendationItem extends ApiItem {
@@ -202,10 +228,15 @@ export interface ApiRecommendationItem extends ApiItem {
   match_reason?: string;
 }
 
-export async function apiGetRecommendations(limit = 20): Promise<ApiRecommendationItem[]> {
+export async function apiGetRecommendations(
+  limit = 20,
+  moods?: string[],
+): Promise<ApiRecommendationItem[]> {
+  const filters: Record<string, unknown> = {};
+  if (moods && moods.length > 0) filters.moods = moods;
   const res = await apiFetch('/v1/recommendations', {
     method: 'POST',
-    body: JSON.stringify({ limit }),
+    body: JSON.stringify({ filters }),
   });
   if (!res.ok) return [];
   const raw = await res.json();
