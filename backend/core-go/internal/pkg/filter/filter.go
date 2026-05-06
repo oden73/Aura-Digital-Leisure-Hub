@@ -41,6 +41,7 @@ func (s *Service) Apply(
 
 	wantedGenres := lowerSet(filters.Genres)
 	wantedMedia := mediaSet(filters.MediaTypes)
+	wantedMoods := lowerSet(filters.Moods)
 
 	out := make([]entities.ScoredItem, 0, len(items))
 	for _, it := range items {
@@ -62,6 +63,9 @@ func (s *Service) Apply(
 		if !matchRatingRange(meta, filters.RatingRange) {
 			continue
 		}
+		if !matchMood(meta, wantedMoods) {
+			continue
+		}
 		out = append(out, it)
 	}
 	return out
@@ -73,7 +77,8 @@ func isEmpty(f entities.RecommendationFilters) bool {
 		f.ReleasePeriod.From == nil &&
 		f.ReleasePeriod.To == nil &&
 		f.RatingRange.Min == 0 &&
-		f.RatingRange.Max == 0
+		f.RatingRange.Max == 0 &&
+		len(f.Moods) == 0
 }
 
 func lowerSet(values []string) map[string]struct{} {
@@ -130,6 +135,18 @@ func matchReleasePeriod(it entities.Item, period entities.DateRange) bool {
 		return false
 	}
 	return true
+}
+
+func matchMood(it entities.Item, wanted map[string]struct{}) bool {
+	if len(wanted) == 0 {
+		return true
+	}
+	t := strings.ToLower(strings.TrimSpace(it.Criteria.Tonality))
+	if t == "" {
+		return false
+	}
+	_, ok := wanted[t]
+	return ok
 }
 
 func matchRatingRange(it entities.Item, r entities.RatingRange) bool {

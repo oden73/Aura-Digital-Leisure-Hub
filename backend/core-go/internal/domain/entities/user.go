@@ -43,3 +43,23 @@ type UserProfile struct {
 	PreferredGenres     []string    `json:"preferred_genres,omitempty"`
 	PreferredMediaTypes []MediaType `json:"preferred_media_types,omitempty"`
 }
+
+// MediaTypeStats holds aggregated interaction stats for a single media type.
+type MediaTypeStats struct {
+	MediaType string  `json:"media_type"`
+	Total     int     `json:"total"`
+	Rated     int     `json:"rated"`
+	AvgRating float64 `json:"avg_rating"`
+	Favorites int     `json:"favorites"`
+	Completed int     `json:"completed"`
+}
+
+// UserStats is the response shape for GET /v1/profile/stats.
+type UserStats struct {
+	TotalInteractions int              `json:"total_interactions"`
+	RatedCount        int              `json:"rated_count"`
+	AvgRating         float64          `json:"avg_rating"`
+	FavoriteCount     int              `json:"favorite_count"`
+	CompletedCount    int              `json:"completed_count"`
+	ByMediaType       []MediaTypeStats `json:"by_media_type"`
+}
