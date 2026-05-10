@@ -92,7 +92,8 @@ services:
       AI_ENGINE_HOST: 0.0.0.0
       AI_ENGINE_PORT: "8090"
       HF_HOME: /data/hf-cache
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-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}
+      # Must be set (e.g. in project-root `.env`). No default — a bogus default breaks auth and hides misconfiguration.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env or the environment}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-poolside/laguna-m.1:free}
     volumes:
       - hf_cache:/data/hf-cache

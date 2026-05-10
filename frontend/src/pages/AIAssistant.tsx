@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Bot, User, Trash2 } from 'lucide-react';
+import ReactMarkdown, { type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiFetch } from '../services/api';
 import { MOCK_DATA } from '../data';
 
@@ -12,6 +14,55 @@ interface Message {
   recommendations?: string[]; // IDs of recommended items
   timestamp: Date;
 }
+
+const assistantMarkdownComponents: Components = {
+  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  h1: ({ children }) => <h1 className="mb-3 text-lg font-bold text-white">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-3 text-base font-bold text-white">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-2 text-sm font-bold text-white">{children}</h3>,
+  ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li className="pl-1">{children}</li>,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-brand-300 underline decoration-brand-300/40 underline-offset-2 hover:text-brand-200"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="my-3 border-l-2 border-brand-400/60 pl-3 text-slate-300">
+      {children}
+    </blockquote>
+  ),
+  code: ({ children, className, ...props }) => (
+    <code
+      className={`${className ?? ''} rounded bg-slate-950/70 px-1.5 py-0.5 font-mono text-[0.85em] text-brand-200`}
+      {...props}
+    >
+      {children}
+    </code>
+  ),
+  pre: ({ children }) => (
+    <pre className="my-3 overflow-x-auto rounded-xl bg-slate-950/80 p-3 text-xs leading-relaxed">
+      {children}
+    </pre>
+  ),
+  table: ({ children }) => (
+    <div className="my-3 overflow-x-auto">
+      <table className="min-w-full border-collapse text-xs">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-white/10 bg-white/5 px-2 py-1 text-left font-semibold text-white">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => <td className="border border-white/10 px-2 py-1">{children}</td>,
+};
 
 export default function AIAssistant() {
   const navigate = useNavigate();
@@ -129,7 +180,16 @@ export default function AIAssistant() {
                   ? 'bg-white/5 border border-white/10 text-slate-200 rounded-tl-none' 
                   : 'bg-brand-500 text-white rounded-tr-none shadow-lg shadow-brand-500/20'
               }`}>
-                {msg.content}
+                {msg.role === 'assistant' ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={assistantMarkdownComponents}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  msg.content
+                )}
               </div>
 
               {/* Recommendations Grid inside Chat */}
