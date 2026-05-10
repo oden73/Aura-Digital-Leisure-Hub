@@ -15,6 +15,18 @@ import {
 } from '../services/api';
 import { MediaItem } from '../types';
 
+type ImgStage = 'primary' | 'steam-header' | 'picsum';
+
+function nextImageSrc(stage: ImgStage, primaryUrl: string, itemId: string): { src: string; next: ImgStage } {
+  if (stage === 'primary') {
+    if (primaryUrl.includes('cdn.akamai.steamstatic.com') && primaryUrl.includes('library_600x900.jpg')) {
+      return { src: primaryUrl.replace('library_600x900.jpg', 'header.jpg'), next: 'steam-header' };
+    }
+    return { src: `https://picsum.photos/seed/${encodeURIComponent(itemId)}/400/600`, next: 'picsum' };
+  }
+  return { src: `https://picsum.photos/seed/${encodeURIComponent(itemId)}/400/600`, next: 'picsum' };
+}
+
 export default function ContentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -29,6 +41,8 @@ export default function ContentDetail() {
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [isRating, setIsRating] = useState(false);
   const [related, setRelated] = useState<MediaItem[]>([]);
+  const [imgStage, setImgStage] = useState<ImgStage>('primary');
+  const [imgSrc, setImgSrc] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -63,6 +77,12 @@ export default function ContentDetail() {
       })
       .catch(() => {});
   }, [user, id]);
+
+  useEffect(() => {
+    if (!item) return;
+    setImgStage('primary');
+    setImgSrc(item.image);
+  }, [item]);
 
   if (loading) {
     return (
@@ -149,6 +169,14 @@ export default function ContentDetail() {
   };
 
   const displayRating = hoverRating || userRating;
+  const externalLabel = item.type === 'game' ? 'Steam' : item.type === 'book' ? 'LiveLib' : 'Кинопоиск';
+
+  const handleImageError = () => {
+    if (imgStage === 'picsum') return;
+    const { src, next } = nextImageSrc(imgStage, item.image, item.id);
+    setImgSrc(src);
+    setImgStage(next);
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-8">
@@ -169,10 +197,11 @@ export default function ContentDetail() {
         >
           <div className="aspect-[2/3] rounded-3xl overflow-hidden glass-panel shadow-2xl">
             <img
-              src={item.image}
+              src={imgSrc || item.image}
               alt={item.title}
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
+              onError={handleImageError}
             />
           </div>
 
@@ -255,10 +284,21 @@ export default function ContentDetail() {
                 </>
               )}
             </button>
-            <button className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-4 rounded-2xl border border-white/10 transition-all flex items-center justify-center gap-2">
+            <a
+              href={item.externalUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-disabled={!item.externalUrl}
+              onClick={(e) => {
+                if (!item.externalUrl) e.preventDefault();
+              }}
+              className={`w-full bg-white/5 text-white font-bold py-4 rounded-2xl border border-white/10 transition-all flex items-center justify-center gap-2 ${
+                item.externalUrl ? 'hover:bg-white/10' : 'opacity-50 cursor-not-allowed'
+              }`}
+            >
               <ExternalLink className="w-5 h-5" />
-              Open in {item.type === 'game' ? 'Steam' : item.type === 'book' ? 'LiveLib' : 'Кинопоиск'}
-            </button>
+              Open in {externalLabel}
+            </a>
           </div>
         </motion.div>
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from openai import OpenAI
 
@@ -15,10 +16,30 @@ _SYSTEM_PROMPT = (
     "based on themes, tonality, and narrative DNA. "
     "When the user describes something they love, explain the connections and "
     "suggest titles they might enjoy. "
-    "Always respond in JSON with the following shape: "
-    '{"text": "<conversational response>", "recommendation_ids": []}. '
-    "The recommendation_ids array should remain empty — item IDs are resolved externally."
+    "You MUST respond with valid JSON and nothing else — no markdown, no backticks. "
+    'Use exactly this shape: {"text": "<conversational response>", "recommendation_ids": []}. '
+    "The recommendation_ids array must remain empty."
 )
+
+
+def _extract_json(raw: str) -> dict:
+    """Extract a JSON object from a string that may contain extra text or markdown."""
+    raw = raw.strip()
+    # Strip markdown code fences if present
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Find the first {...} block
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+    return {}
 
 
 class LLMReasoningService:
@@ -52,13 +73,13 @@ class LLMReasoningService:
             completion = self._client.chat.completions.create(
                 model=self._model,
                 messages=messages,  # type: ignore[arg-type]
-                response_format={"type": "json_object"},
                 temperature=0.7,
             )
             raw = completion.choices[0].message.content or "{}"
-            result = json.loads(raw)
+            result = _extract_json(raw)
+            text = str(result.get("text", raw if not result else ""))
             return {
-                "text": str(result.get("text", "")),
+                "text": text,
                 "recommendation_ids": list(result.get("recommendation_ids", [])),
             }
         except Exception:

@@ -62,13 +62,14 @@ services:
       AI_ENGINE_TIMEOUT_MS: ${AI_ENGINE_TIMEOUT_MS:-2000}
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-20}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-40}
       SHUTDOWN_TIMEOUT_SECONDS: ${SHUTDOWN_TIMEOUT_SECONDS:-15}
       SIMILARITY_CACHE_TTL_SECONDS: ${SIMILARITY_CACHE_TTL_SECONDS:-1800}
       USER_SIMILARITY_CACHE_MAX: ${USER_SIMILARITY_CACHE_MAX:-100000}
       ITEM_SIMILARITY_CACHE_MAX: ${ITEM_SIMILARITY_CACHE_MAX:-50000}
+      STEAM_API_KEY: ${STEAM_API_KEY}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -90,6 +91,8 @@ services:
       AI_ENGINE_HOST: 0.0.0.0
       AI_ENGINE_PORT: "8090"
       HF_HOME: /data/hf-cache
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat-v3-0324:free}
     volumes:
       - hf_cache:/data/hf-cache
     depends_on:

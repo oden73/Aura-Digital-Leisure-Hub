@@ -100,6 +100,16 @@ func Load() Config {
 			}
 		}
 	}
+	// Empty CORS disables cross-origin access; local SPA dev breaks without an
+	// allowlist. Outside production we default common Vite / dev origins.
+	if len(corsOrigins) == 0 && !strings.EqualFold(env, "production") {
+		corsOrigins = []string{
+			"http://localhost:3000",
+			"http://127.0.0.1:3000",
+			"http://localhost:5173",
+			"http://127.0.0.1:5173",
+		}
+	}
 
 	rps := envFloat("RATE_LIMIT_RPS", 20)
 	burst := envFloat("RATE_LIMIT_BURST", 40)

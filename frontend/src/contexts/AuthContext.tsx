@@ -19,6 +19,8 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   isAdmin: boolean;
+  showWelcomeModal: boolean;
+  dismissWelcomeModal: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -28,6 +30,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isAdmin: false,
+  showWelcomeModal: false,
+  dismissWelcomeModal: () => {},
   login: async () => {},
   register: async () => {},
   logout: () => {},
@@ -40,6 +44,7 @@ function profileToUser(p: ApiProfile): AuthUser {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -62,7 +67,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await apiRegister(username, email, password);
     const p = await apiProfile();
     setUser(profileToUser(p));
+    setShowWelcomeModal(true);
   };
+
+  const dismissWelcomeModal = () => setShowWelcomeModal(false);
 
   const logout = () => {
     clearTokens();
@@ -70,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin: false, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin: false, showWelcomeModal, dismissWelcomeModal, login, register, logout }}>
       {loading ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );

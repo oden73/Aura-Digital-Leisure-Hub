@@ -5,6 +5,7 @@ export interface MediaItem {
   type: MediaType;
   title: string;
   image: string;
+  externalUrl?: string;
   // Common Criteria
   genre: string[];
   setting: string;

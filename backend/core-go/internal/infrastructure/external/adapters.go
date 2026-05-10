@@ -202,7 +202,8 @@ func (a SteamAdapter) Search(query string, limit int) ([]ExternalData, error) {
 		limit = 10
 	}
 	target := fmt.Sprintf(
-		"https://store.steampowered.com/api/storesearch/?term=%s&l=en&cc=us",
+		"%s/api/storesearch/?term=%s&l=en&cc=us",
+		a.storeBase(),
 		url.QueryEscape(query),
 	)
 	resp, err := http.Get(target) //nolint:noctx
@@ -238,8 +239,11 @@ func (a SteamAdapter) Search(query string, limit int) ([]ExternalData, error) {
 			Source:     entities.ExternalServiceSteam,
 			Title:      it.Name,
 			RawData: map[string]any{
-				"cover_image_url": it.Image,
-				"media_type":      string(entities.MediaTypeGame),
+				"cover_image_url": fmt.Sprintf(
+					"https://cdn.akamai.steamstatic.com/steam/apps/%d/library_600x900.jpg",
+					it.ID,
+				),
+				"media_type": string(entities.MediaTypeGame),
 			},
 		})
 	}
@@ -255,12 +259,17 @@ func steamDataToExternal(appID string, data map[string]any) ExternalData {
 		"media_type": string(entities.MediaTypeGame),
 	}
 
+	if v, _ := data["type"].(string); v != "" {
+		raw["steam_app_type"] = v
+	}
 	if v, _ := data["short_description"].(string); v != "" {
 		raw["description"] = v
 	}
-	if v, _ := data["header_image"].(string); v != "" {
-		raw["cover_image_url"] = v
-	}
+	// Use Steam's portrait library image (600×900) for consistent card display.
+	raw["cover_image_url"] = fmt.Sprintf(
+		"https://cdn.akamai.steamstatic.com/steam/apps/%s/library_600x900.jpg",
+		appID,
+	)
 
 	// developers: []interface{} of strings
 	if devs, ok := data["developers"].([]interface{}); ok && len(devs) > 0 {

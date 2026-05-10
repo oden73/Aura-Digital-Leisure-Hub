@@ -174,7 +174,7 @@ func (c *HTTPClient) chat(req ChatRequest) (ChatResponse, error) {
 		return ChatResponse{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	httpReq, err := http.NewRequestWithContext(
@@ -188,7 +188,10 @@ func (c *HTTPClient) chat(req ChatRequest) (ChatResponse, error) {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.HTTP.Do(httpReq)
+	// Use a dedicated client with no hard timeout so the 60-second context
+	// governs instead of the shared AI_ENGINE_TIMEOUT_MS (2s by default).
+	chatHTTP := &http.Client{}
+	resp, err := chatHTTP.Do(httpReq)
 	if err != nil {
 		return ChatResponse{}, err
 	}
