@@ -146,6 +146,9 @@ jobs:
   docker-compose:
     name: Compose lint
     runs-on: ubuntu-latest
+    env:
+      OPENROUTER_API_KEY: "dummy-key"
+      STEAM_API_KEY: "dummy-key"
     steps:
       - uses: actions/checkout@v4
 
