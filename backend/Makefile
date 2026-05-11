@@ -1,5 +1,11 @@
 SHELL := /bin/bash
 
+# Repo root is the parent of this directory (`backend/`). Prefer its `.venv` when present,
+# unless PYTHON is passed on the command line or set in the environment.
+REPO_ROOT := $(abspath $(CURDIR)/..)
+_REPO_VENV_PYTHON := $(REPO_ROOT)/.venv/bin/python
+PYTHON ?= $(shell test -x "$(_REPO_VENV_PYTHON)" && printf '%s' "$(_REPO_VENV_PYTHON)" || printf '%s' python3)
+
 TEST_REPORT?=reports/test-report.txt
 
 .PHONY: test
@@ -12,11 +18,16 @@ test:
 		go_status=$$?; \
 		echo; \
 		echo "== Python AI engine =="; \
-		$(MAKE) -C ai-engine-python test TEST_REPORT=reports/test-report.txt; \
+		$(MAKE) -C ai-engine-python test TEST_REPORT=reports/test-report.txt PYTHON="$(PYTHON)"; \
 		py_status=$$?; \
 		echo; \
 		echo "== Summary =="; \
 		echo "go_status=$$go_status"; \
 		echo "python_status=$$py_status"; \
 		if [ $$go_status -ne 0 ] || [ $$py_status -ne 0 ]; then exit 1; fi; \
-	} 2>&1 | tee $(TEST_REPORT)
+	} 2>&1 | tee $(TEST_REPORT); \
+	test_status=$${PIPESTATUS[0]}; \
+	$(PYTHON) scripts/generate_visual_reports.py --reports-dir reports; \
+	report_status=$$?; \
+	if [ $$test_status -ne 0 ]; then exit $$test_status; fi; \
+	exit $$report_status
