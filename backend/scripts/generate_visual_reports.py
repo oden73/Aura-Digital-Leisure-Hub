@@ -6,9 +6,14 @@ from __future__ import annotations
 import argparse
 import html
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+# go tool cover -func lines (file paths use slashes even on Windows).
+_GO_COVER_FUNC_LINE = re.compile(r"^(.+\.go):\d+:.+\s(\d+(?:\.\d+)?)%\s*$")
 
 
 @dataclass(frozen=True)
@@ -52,27 +57,40 @@ def main() -> int:
 
     test_report = reports_dir / "test-report.txt"
     quality_report = reports_dir / "recommendation_quality_report.md"
+    online_quality_report = reports_dir / "recommendation_online_quality_report.md"
 
     test_text = read_text(test_report)
     quality = parse_recommendation_quality(read_text(quality_report))
+    online_quality = parse_recommendation_quality(read_text(online_quality_report))
     statuses = parse_statuses(test_text)
     go_coverage = parse_go_package_coverage(test_text)
+    cover_stdout = ""
+    if not go_coverage:
+        go_coverage = aggregate_go_cover_func_lines(test_text.splitlines())
+    if not go_coverage:
+        go_coverage, cover_stdout = load_go_cover_func_from_profile(reports_dir)
     python_coverage = parse_python_coverage(test_text)
-    totals = parse_coverage_totals(test_text, go_coverage, python_coverage)
+    totals = parse_coverage_totals(test_text, python_coverage)
+    totals = ensure_go_total_row(totals, test_text, cover_stdout, go_coverage)
 
     coverage_svg = render_coverage_svg(totals, go_coverage, python_coverage)
-    quality_svg = render_quality_svg(quality)
+    quality_svg = render_quality_svg(quality, "Recommendation Quality (offline)")
+    online_quality_svg = render_quality_svg(
+        online_quality, "Recommendation Quality (online)"
+    )
     dashboard_html = render_dashboard_html(
         statuses=statuses,
         totals=totals,
         go_coverage=go_coverage,
         python_coverage=python_coverage,
         quality=quality,
+        online_quality=online_quality,
         coverage_svg_name="coverage_overview.svg",
         quality_svg_name="recommendation_quality_overview.svg",
+        online_quality_svg_name="recommendation_online_quality_overview.svg",
         source_reports=[
             path.name
-            for path in (test_report, quality_report)
+            for path in (test_report, quality_report, online_quality_report)
             if path.exists()
         ],
     )
@@ -80,6 +98,9 @@ def main() -> int:
     (reports_dir / "coverage_overview.svg").write_text(coverage_svg, encoding="utf-8")
     (reports_dir / "recommendation_quality_overview.svg").write_text(
         quality_svg, encoding="utf-8"
+    )
+    (reports_dir / "recommendation_online_quality_overview.svg").write_text(
+        online_quality_svg, encoding="utf-8"
     )
     (reports_dir / "visual-report.html").write_text(dashboard_html, encoding="utf-8")
 
@@ -90,7 +111,11 @@ def main() -> int:
 def read_text(path: Path) -> str:
     if not path.exists():
         return ""
-    return path.read_text(encoding="utf-8", errors="replace")
+    raw = path.read_bytes().replace(b"\x00", b"")
+    text = raw.decode("utf-8", errors="replace")
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    return text
 
 
 def parse_statuses(text: str) -> list[Status]:
@@ -112,6 +137,91 @@ def parse_go_package_coverage(text: str) -> list[CoverageRow]:
     return rows
 
 
+def aggregate_go_cover_func_lines(lines: Iterable[str]) -> list[CoverageRow]:
+    """Build per-directory bars from `go tool cover -func` output (merged -coverpkg profile)."""
+    by_pkg: dict[str, list[float]] = {}
+    marker = "/core-go/"
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("total:") or ".go:" not in line:
+            continue
+        match = _GO_COVER_FUNC_LINE.match(line)
+        if not match:
+            continue
+        path = match.group(1)
+        pct = float(match.group(2))
+        if marker not in path:
+            continue
+        rel = path.split(marker, 1)[1]
+        pkg_dir = str(Path(rel).parent.as_posix())
+        by_pkg.setdefault(pkg_dir, []).append(pct)
+    rows = [
+        CoverageRow(
+            short_go_package(f"aura/backend/core-go/{pkg}"),
+            average(vals),
+        )
+        for pkg, vals in sorted(by_pkg.items())
+    ]
+    return rows
+
+
+def load_go_cover_func_from_profile(reports_dir: Path) -> tuple[list[CoverageRow], str]:
+    profile = reports_dir / "coverage.out"
+    if not profile.is_file() or profile.stat().st_size == 0:
+        return [], ""
+    go_bin = shutil.which("go")
+    if not go_bin:
+        return [], ""
+    reports_dir = reports_dir.resolve()
+    module_root = reports_dir.parent / "core-go"
+    cwd_kw: dict[str, str] = {}
+    if (module_root / "go.mod").is_file():
+        cwd_kw["cwd"] = str(module_root)
+    prof_arg = str(profile.resolve())
+    try:
+        proc = subprocess.run(
+            [go_bin, "tool", "cover", "-func", prof_arg],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            **cwd_kw,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return [], ""
+    if proc.returncode != 0:
+        return [], ""
+    out = proc.stdout or ""
+    return aggregate_go_cover_func_lines(out.splitlines()), out
+
+
+def extract_go_statement_total(text: str) -> float | None:
+    match = re.search(
+        r"^total:\s+\(statements\)\s+([0-9]+(?:\.[0-9]+)?)%",
+        text,
+        re.MULTILINE,
+    )
+    return float(match.group(1)) if match else None
+
+
+def ensure_go_total_row(
+    totals: list[CoverageRow],
+    test_text: str,
+    cover_stdout: str,
+    go_rows: list[CoverageRow],
+) -> list[CoverageRow]:
+    if not go_rows:
+        return totals
+    if any(row.name == "Go total" for row in totals):
+        return totals
+    merged = extract_go_statement_total(test_text) or extract_go_statement_total(
+        cover_stdout
+    )
+    if merged is None:
+        merged = average(row.percent for row in go_rows)
+    return [CoverageRow("Go total", merged), *totals]
+
+
 def parse_python_coverage(text: str) -> list[CoverageRow]:
     rows: list[CoverageRow] = []
     in_table = False
@@ -131,7 +241,8 @@ def parse_python_coverage(text: str) -> list[CoverageRow]:
             or line.startswith("---")
         ):
             continue
-        match = re.match(r"^(\S+)\s+\d+\s+\d+\s+(\d+)%\b", line)
+        # Do not use %\b: % is non-word, so \b does not match at end of line.
+        match = re.match(r"^(\S+)\s+\d+\s+\d+\s+(\d+)%", line)
         if match:
             rows.append(CoverageRow(match.group(1), float(match.group(2))))
     return rows
@@ -139,15 +250,12 @@ def parse_python_coverage(text: str) -> list[CoverageRow]:
 
 def parse_coverage_totals(
     text: str,
-    go_rows: list[CoverageRow],
     python_rows: list[CoverageRow],
 ) -> list[CoverageRow]:
     totals: list[CoverageRow] = []
     go_total = re.search(r"^total:\s+\(statements\)\s+([0-9]+(?:\.[0-9]+)?)%", text, re.MULTILINE)
     if go_total:
         totals.append(CoverageRow("Go total", float(go_total.group(1))))
-    elif go_rows:
-        totals.append(CoverageRow("Go total", average(row.percent for row in go_rows)))
 
     python_total = re.search(r"^TOTAL\s+\d+\s+\d+\s+(\d+)%$", text, re.MULTILINE)
     if python_total:
@@ -196,27 +304,16 @@ def render_dashboard_html(
     go_coverage: list[CoverageRow],
     python_coverage: list[CoverageRow],
     quality: RecommendationQuality | None,
+    online_quality: RecommendationQuality | None,
     coverage_svg_name: str,
     quality_svg_name: str,
+    online_quality_svg_name: str,
     source_reports: list[str],
 ) -> str:
     status_cards = "\n".join(render_status_card(status) for status in statuses)
     total_cards = "\n".join(render_metric_card(row.name, f"{row.percent:.1f}%") for row in totals)
-    quality_cards = ""
-    if quality:
-        quality_cards = "\n".join(
-            render_metric_card(label, f"{quality.summary[key]:.3f}")
-            for key, label in (
-                ("precision", "Precision"),
-                ("recall", "Recall"),
-                ("ndcg", "NDCG"),
-                ("mrr", "MRR"),
-                ("hit_rate", "Hit rate"),
-                ("catalog_coverage", "Catalog coverage"),
-                ("genre_diversity", "Genre diversity"),
-            )
-            if key in quality.summary
-        )
+    quality_cards = render_quality_cards(quality)
+    online_quality_cards = render_quality_cards(online_quality)
 
     source_links = "\n".join(
         f'<li><a href="{escape_attr(name)}">{escape(name)}</a></li>'
@@ -369,11 +466,19 @@ def render_dashboard_html(
     </section>
 
     <section>
-      <h2>Recommendation Quality</h2>
+      <h2>Recommendation Quality Offline</h2>
       <div class="grid">
         {quality_cards or render_empty_card("Recommendation report not found")}
       </div>
       <img class="visual" src="{escape_attr(quality_svg_name)}" alt="Recommendation quality chart">
+    </section>
+
+    <section>
+      <h2>Recommendation Quality Online</h2>
+      <div class="grid">
+        {online_quality_cards or render_empty_card("Online recommendation report not found")}
+      </div>
+      <img class="visual" src="{escape_attr(online_quality_svg_name)}" alt="Online recommendation quality chart">
     </section>
 
     <section>
@@ -416,10 +521,10 @@ def render_coverage_svg(
     )
 
 
-def render_quality_svg(quality: RecommendationQuality | None) -> str:
+def render_quality_svg(quality: RecommendationQuality | None, title: str) -> str:
     if not quality:
         return render_bar_svg(
-            title="Recommendation Quality",
+            title=title,
             rows=[CoverageRow("No recommendation report", 0)],
             width=1120,
             row_height=32,
@@ -446,12 +551,30 @@ def render_quality_svg(quality: RecommendationQuality | None) -> str:
         if "precision" in scenario.metrics
     )
     return render_bar_svg(
-        title="Recommendation Quality",
+        title=title,
         rows=rows,
         width=1120,
         row_height=32,
         max_value=1.0,
         value_suffix="",
+    )
+
+
+def render_quality_cards(quality: RecommendationQuality | None) -> str:
+    if not quality:
+        return ""
+    return "\n".join(
+        render_metric_card(label, f"{quality.summary[key]:.3f}")
+        for key, label in (
+            ("precision", "Precision"),
+            ("recall", "Recall"),
+            ("ndcg", "NDCG"),
+            ("mrr", "MRR"),
+            ("hit_rate", "Hit rate"),
+            ("catalog_coverage", "Catalog coverage"),
+            ("genre_diversity", "Genre diversity"),
+        )
+        if key in quality.summary
     )
 
 

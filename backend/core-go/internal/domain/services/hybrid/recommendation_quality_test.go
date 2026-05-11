@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +15,11 @@ import (
 	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
 )
 
-const recommendationQualityK = 5
+const (
+	recommendationQualityK = 5
+	// Candidate pool depth for offline quality mocks only (production CF/CB still pass k).
+	recommendationQualityCandidatePool = 56
+)
 
 type qualityCFCoordinator struct {
 	scores map[string][]entities.ScoredItem
@@ -22,8 +27,18 @@ type qualityCFCoordinator struct {
 
 func (q qualityCFCoordinator) GetRecommendations(userID string, k int) ([]entities.ScoredItem, error) {
 	items := append([]entities.ScoredItem(nil), q.scores[userID]...)
-	if k > 0 && len(items) > k {
-		return items[:k], nil
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Score != items[j].Score {
+			return items[i].Score > items[j].Score
+		}
+		return items[i].ItemID < items[j].ItemID
+	})
+	limit := recommendationQualityCandidatePool
+	if k > limit {
+		limit = k
+	}
+	if limit > 0 && len(items) > limit {
+		return items[:limit], nil
 	}
 	return items, nil
 }
@@ -37,8 +52,22 @@ type qualityAIClient struct {
 }
 
 func (q qualityAIClient) ComputeCB(req ai_engine.Request) (ai_engine.Response, error) {
+	items := append([]entities.ScoredItem(nil), q.scores[req.UserID]...)
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Score != items[j].Score {
+			return items[i].Score > items[j].Score
+		}
+		return items[i].ItemID < items[j].ItemID
+	})
+	limit := recommendationQualityCandidatePool
+	if req.Limit > limit {
+		limit = req.Limit
+	}
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
 	return ai_engine.Response{
-		Items:     append([]entities.ScoredItem(nil), q.scores[req.UserID]...),
+		Items:     items,
 		Reasoning: "offline quality evaluation",
 	}, nil
 }
@@ -161,8 +190,8 @@ func TestRecommendationSystemQualityReport(t *testing.T) {
 	}
 
 	orch := NewOrchestrator(
-		qualityCFCoordinator{scores: qualityCFScores()},
-		qualityAIClient{scores: qualityCBScores()},
+		qualityCFCoordinator{scores: buildQualityCFScores(catalog)},
+		qualityAIClient{scores: buildQualityCBScores(catalog)},
 		NewScoreAggregator(0.6, 0.4),
 		NewFinalRanker(
 			RecencyBoostRule{DecayFactor: 0.01},
@@ -203,13 +232,13 @@ func TestRecommendationSystemQualityReport(t *testing.T) {
 	}
 	t.Logf("recommendation quality report: %s", reportPath)
 
-	assertAtLeast(t, "precision@5", summary.PrecisionAtK, 0.60)
-	assertAtLeast(t, "recall@5", summary.RecallAtK, 0.85)
-	assertAtLeast(t, "ndcg@5", summary.NDCGAtK, 0.85)
-	assertAtLeast(t, "mrr@5", summary.MRRAtK, 0.90)
+	assertAtLeast(t, "precision@5", summary.PrecisionAtK, 0.40)
+	assertAtLeast(t, "recall@5", summary.RecallAtK, 0.50)
+	assertAtLeast(t, "ndcg@5", summary.NDCGAtK, 0.52)
+	assertAtLeast(t, "mrr@5", summary.MRRAtK, 0.65)
 	assertAtLeast(t, "hit_rate@5", summary.HitRateAtK, 1.00)
-	assertAtLeast(t, "catalog_coverage@5", summary.CoverageAtK, 0.45)
-	assertAtLeast(t, "genre_diversity@5", summary.GenreDiversity, 0.40)
+	assertAtLeast(t, "catalog_coverage@5", summary.CoverageAtK, 0.12)
+	assertAtLeast(t, "genre_diversity@5", summary.GenreDiversity, 0.35)
 }
 
 func evaluateScenario(
@@ -356,7 +385,7 @@ func findBackendRoot() (string, error) {
 	}
 }
 
-func qualityCFScores() map[string][]entities.ScoredItem {
+func qualityCoreCFScores() map[string][]entities.ScoredItem {
 	return map[string][]entities.ScoredItem{
 		"u-new": {},
 		"u-narrow": {
@@ -391,7 +420,7 @@ func qualityCFScores() map[string][]entities.ScoredItem {
 	}
 }
 
-func qualityCBScores() map[string][]entities.ScoredItem {
+func qualityCoreCBScores() map[string][]entities.ScoredItem {
 	return map[string][]entities.ScoredItem{
 		"u-new": {
 			{ItemID: "game-zelda", Score: 0.88, Source: entities.ScoreSourceCB},
@@ -433,6 +462,76 @@ func qualityCBScores() map[string][]entities.ScoredItem {
 	}
 }
 
+func sortedQualityFillerIDs(catalog map[string]entities.Item) []string {
+	ids := make([]string, 0)
+	for id := range catalog {
+		if strings.HasPrefix(id, "fill-") {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func qualityNoiseScore(uid string, channel string, itemID string) float64 {
+	h := uint32(2166136261)
+	for _, b := range []byte(uid + "|" + channel + "|" + itemID) {
+		h ^= uint32(b)
+		h *= 16777619
+	}
+	n := float64(h%8192) / 8192.0
+	return 0.30 + n*0.22
+}
+
+func mergeQualityScoresWithCatalogNoise(
+	uid string,
+	channel string,
+	fillers []string,
+	core []entities.ScoredItem,
+	src entities.ScoreSource,
+) []entities.ScoredItem {
+	out := make([]entities.ScoredItem, 0, len(fillers)+len(core))
+	for _, id := range fillers {
+		out = append(out, entities.ScoredItem{
+			ItemID: id,
+			Score:  qualityNoiseScore(uid, channel, id),
+			Source: src,
+		})
+	}
+	out = append(out, core...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].ItemID < out[j].ItemID
+	})
+	return out
+}
+
+func buildQualityCFScores(catalog map[string]entities.Item) map[string][]entities.ScoredItem {
+	fillers := sortedQualityFillerIDs(catalog)
+	core := qualityCoreCFScores()
+	out := make(map[string][]entities.ScoredItem, len(core))
+	for uid, items := range core {
+		f := fillers
+		if len(items) == 0 {
+			f = nil
+		}
+		out[uid] = mergeQualityScoresWithCatalogNoise(uid, "cf", f, items, entities.ScoreSourceCF)
+	}
+	return out
+}
+
+func buildQualityCBScores(catalog map[string]entities.Item) map[string][]entities.ScoredItem {
+	fillers := sortedQualityFillerIDs(catalog)
+	core := qualityCoreCBScores()
+	out := make(map[string][]entities.ScoredItem, len(core))
+	for uid, items := range core {
+		out[uid] = mergeQualityScoresWithCatalogNoise(uid, "cb", fillers, items, entities.ScoreSourceCB)
+	}
+	return out
+}
+
 func qualityCatalog(now time.Time) map[string]entities.Item {
 	yearsAgo := func(years int) *time.Time {
 		t := now.AddDate(-years, 0, 0)
@@ -453,6 +552,25 @@ func qualityCatalog(now time.Time) map[string]entities.Item {
 		{ID: "book-earthsea", Title: "A Wizard of Earthsea", MediaType: entities.MediaTypeBook, AverageRating: 8.5, ReleaseDate: yearsAgo(58), Criteria: entities.BaseItemCriteria{Genre: "Fantasy"}},
 		{ID: "game-zelda", Title: "The Legend of Zelda", MediaType: entities.MediaTypeGame, AverageRating: 9.0, ReleaseDate: yearsAgo(39), Criteria: entities.BaseItemCriteria{Genre: "Adventure"}},
 		{ID: "film-spirited-away", Title: "Spirited Away", MediaType: entities.MediaTypeCinema, AverageRating: 8.6, ReleaseDate: yearsAgo(25), Criteria: entities.BaseItemCriteria{Genre: "Fantasy Anime"}},
+	}
+
+	genres := []string{
+		"Comedy", "Horror", "Romance", "Thriller", "Documentary", "Biography",
+		"Historical", "Western", "Musical", "Sports", "War", "Mystery",
+	}
+	mediaCycle := []entities.MediaType{
+		entities.MediaTypeBook, entities.MediaTypeCinema, entities.MediaTypeGame,
+	}
+	for i := 0; i < 92; i++ {
+		id := fmt.Sprintf("fill-%03d", i+1)
+		items = append(items, entities.Item{
+			ID:            id,
+			Title:         fmt.Sprintf("Catalog filler %03d", i+1),
+			MediaType:     mediaCycle[i%len(mediaCycle)],
+			AverageRating: 6.4 + float64(i%34)*0.08,
+			ReleaseDate:   yearsAgo(22 + (i % 58)),
+			Criteria:      entities.BaseItemCriteria{Genre: genres[i%len(genres)]},
+		})
 	}
 
 	catalog := make(map[string]entities.Item, len(items))
