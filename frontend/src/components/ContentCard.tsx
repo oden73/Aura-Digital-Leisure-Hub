@@ -16,9 +16,33 @@ const TypeIcon = ({ type }: { type: MediaItem['type'] }) => {
   }
 };
 
+type ImgStage = 'primary' | 'steam-header' | 'picsum';
+
+function nextSrc(stage: ImgStage, primaryUrl: string, itemId: string): { src: string; next: ImgStage } {
+  if (stage === 'primary') {
+    if (primaryUrl.includes('cdn.akamai.steamstatic.com') && primaryUrl.includes('library_600x900.jpg')) {
+      return { src: primaryUrl.replace('library_600x900.jpg', 'header.jpg'), next: 'steam-header' };
+    }
+    return { src: `https://picsum.photos/seed/${encodeURIComponent(itemId)}/400/600`, next: 'picsum' };
+  }
+  return { src: `https://picsum.photos/seed/${encodeURIComponent(itemId)}/400/600`, next: 'picsum' };
+}
+
 export const ContentCard: React.FC<ContentCardProps> = ({ item }) => {
-  const [imgError, setImgError] = React.useState(false);
-  const fallback = `https://picsum.photos/seed/${encodeURIComponent(item.id)}/400/600`;
+  const [imgStage, setImgStage] = React.useState<ImgStage>('primary');
+  const [imgSrc, setImgSrc] = React.useState(item.image);
+
+  React.useEffect(() => {
+    setImgStage('primary');
+    setImgSrc(item.image);
+  }, [item.id, item.image]);
+
+  const handleImgError = () => {
+    if (imgStage === 'picsum') return;
+    const { src, next } = nextSrc(imgStage, item.image, item.id);
+    setImgSrc(src);
+    setImgStage(next);
+  };
 
   return (
     <Link to={`/content/${item.id}`}>
@@ -31,11 +55,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({ item }) => {
       >
         <div className="relative aspect-[2/3] overflow-hidden bg-slate-800">
           <img
-            src={imgError ? fallback : item.image}
+            src={imgSrc}
             alt={item.title}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
             referrerPolicy="no-referrer"
-            onError={() => setImgError(true)}
+            onError={handleImgError}
             loading="lazy"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60" />

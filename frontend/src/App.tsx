@@ -1,9 +1,11 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AnimatePresence } from 'motion/react';
 import { Toaster } from 'sonner';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { WelcomeModal } from './components/WelcomeModal';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -12,6 +14,16 @@ import Library from './pages/Library';
 import AIAssistant from './pages/AIAssistant';
 import Stats from './pages/Stats';
 import NotFound from './pages/NotFound';
+
+function WelcomeModalPortal() {
+  const { user, showWelcomeModal } = useAuth();
+  if (!user || !showWelcomeModal) return null;
+  return (
+    <AnimatePresence>
+      <WelcomeModal username={user.username} />
+    </AnimatePresence>
+  );
+}
 
 export default function App() {
   return (
@@ -32,6 +44,7 @@ export default function App() {
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
+          <WelcomeModalPortal />
         </Router>
         <Toaster
           theme="dark"

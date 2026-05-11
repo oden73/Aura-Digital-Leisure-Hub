@@ -1,19 +1,21 @@
-# Local-development stack for the Aura backend.
+# Production / VPS deploy — full Aura stack.
 #
 # Usage:
-#   cd backend
-#   cp .env.example .env
-#   docker compose -f deployments/docker-compose.backend.yml up --build
+#   cp backend/.env.example .env   # then fill in real values
+#   docker compose up --build -d
+#
+# The Go core API is exposed on CORE_GO_PORT (default 8080).
+# Put Nginx / Caddy in front to terminate TLS and set CORS_ALLOWED_ORIGINS
+# to your Vercel/Pages frontend URL.
 
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-aura}
       POSTGRES_USER: ${POSTGRES_USER:-aura}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aura}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}   # override in .env on VPS
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -24,8 +26,7 @@ services:
 
   chroma:
     image: ghcr.io/chroma-core/chroma:latest
-    ports:
-      - "${CHROMA_PORT:-8000}:8000"
+    restart: unless-stopped
     volumes:
       - chroma_data:/data
     healthcheck:
@@ -37,9 +38,9 @@ services:
 
   migrate:
     build:
-      context: ..
+      context: backend
       dockerfile: core-go/Dockerfile
-    image: aura-core-go:dev
+    image: aura-core-go:latest
     entrypoint: ["migrate", "--dir=/app/migrations", "up"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
@@ -50,17 +51,18 @@ services:
 
   core-go:
     build:
-      context: ..
+      context: backend
       dockerfile: core-go/Dockerfile
-    image: aura-core-go:dev
+    image: aura-core-go:latest
+    restart: unless-stopped
     ports:
       - "${CORE_GO_PORT:-8080}:8080"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}   # must be set in .env on VPS
       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai-engine:8090}
       AI_ENGINE_TIMEOUT_MS: ${AI_ENGINE_TIMEOUT_MS:-2000}
-      APP_ENV: ${APP_ENV:-development}
+      APP_ENV: ${APP_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-20}
@@ -78,11 +80,10 @@ services:
 
   ai-engine:
     build:
-      context: ../ai-engine-python
+      context: backend/ai-engine-python
       dockerfile: Dockerfile
-    image: aura-ai-engine:dev
-    ports:
-      - "${AI_ENGINE_PORT:-8090}:8090"
+    image: aura-ai-engine:latest
+    restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://aura:aura@postgres:5432/aura?sslmode=disable}
       CHROMA_URL: ${CHROMA_URL:-http://chroma:8000}
@@ -91,8 +92,9 @@ services:
       AI_ENGINE_HOST: 0.0.0.0
       AI_ENGINE_PORT: "8090"
       HF_HOME: /data/hf-cache
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-deepseek/deepseek-chat-v3-0324:free}
+      # Must be set (e.g. in project-root `.env`). No default — a bogus default breaks auth and hides misconfiguration.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env or the environment}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-poolside/laguna-m.1:free}
     volumes:
       - hf_cache:/data/hf-cache
     depends_on:

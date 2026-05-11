@@ -113,7 +113,8 @@ func Run() error {
 	getRecs := usecase.NewGetRecommendations(orchestrator, userRepo, metadataRepo, filterSvc).
 		WithPopularity(metadataRepo).
 		WithMetrics(metricsRecorder)
-	searchUC := usecase.NewSearchContent(metadataRepo)
+	searchUC := usecase.NewSearchContent(metadataRepo).
+		WithExternalSources(adapters, embeddingPublisher)
 	getContentUC := usecase.NewGetContent(metadataRepo)
 	upsertContentUC := usecase.NewUpsertContent(metadataRepo, embeddingPublisher)
 	updateUC := usecase.NewUpdateInteraction(interactionRepo).

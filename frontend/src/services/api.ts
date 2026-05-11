@@ -1,6 +1,18 @@
 import { MediaItem } from '../types';
 
-const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080';
+/**
+ * In dev, use same-origin requests so Vite can proxy `/v1` → API (avoids CORS).
+ * In production builds, set VITE_API_URL to your deployed core API.
+ */
+const API_BASE = import.meta.env.DEV
+  ? ''
+  : ((import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8080');
+
+function apiURL(path: string): string {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  if (!API_BASE) return p;
+  return `${API_BASE.replace(/\/$/, '')}${p}`;
+}
 
 const KEY_ACCESS  = 'aura_access';
 const KEY_REFRESH = 'aura_refresh';
@@ -23,7 +35,7 @@ async function doRefresh(): Promise<boolean> {
   const refresh = localStorage.getItem(KEY_REFRESH);
   if (!refresh) return false;
   try {
-    const res = await fetch(`${BASE}/v1/auth/refresh`, {
+    const res = await fetch(apiURL('/v1/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh }),
@@ -44,13 +56,30 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
-  let res = await fetch(`${BASE}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(apiURL(path), { ...init, headers });
+  } catch {
+    throw new Error(
+      import.meta.env.DEV
+        ? 'Network error — is the Go API running on port 8080? (Vite proxies /v1 there in dev.)'
+        : 'Network error — could not reach the API.',
+    );
+  }
 
   if (res.status === 401) {
     const ok = await doRefresh();
     if (ok) {
       headers.set('Authorization', `Bearer ${getAccessToken()!}`);
-      res = await fetch(`${BASE}${path}`, { ...init, headers });
+      try {
+        res = await fetch(apiURL(path), { ...init, headers });
+      } catch {
+        throw new Error(
+          import.meta.env.DEV
+            ? 'Network error — is the Go API running on port 8080?'
+            : 'Network error — could not reach the API.',
+        );
+      }
     }
   }
   return res;
@@ -115,12 +144,18 @@ export interface ApiItem {
   };
 }
 
+function steamUrlFromCover(coverUrl?: string): string | undefined {
+  const match = coverUrl?.match(/\/steam\/apps\/(\d+)\//);
+  return match ? `https://store.steampowered.com/app/${match[1]}` : undefined;
+}
+
 export function mapApiItem(item: ApiItem & { match_score?: number; match_reason?: string }): MediaItem {
   return {
     id: item.id,
     type: item.media_type === 'cinema' ? 'movie' : item.media_type,
     title: item.title,
     image: item.cover_image_url || `https://picsum.photos/seed/${encodeURIComponent(item.id)}/400/600`,
+    externalUrl: steamUrlFromCover(item.cover_image_url),
     genre: item.criteria?.genre
       ? item.criteria.genre.split(',').map(s => s.trim()).filter(Boolean)
       : [],
@@ -221,11 +256,42 @@ export async function apiGetStats(): Promise<ApiUserStats> {
   return res.json();
 }
 
+// ---- External Accounts ----
+
+export async function apiLinkExternalAccount(
+  serviceName: string,
+  externalUserId: string,
+  externalProfileUrl?: string,
+): Promise<void> {
+  const res = await apiFetch('/v1/external-accounts', {
+    method: 'POST',
+    body: JSON.stringify({
+      service_name: serviceName,
+      external_user_id: externalUserId,
+      ...(externalProfileUrl ? { external_profile_url: externalProfileUrl } : {}),
+    }),
+  });
+  if (!res.ok) {
+    let msg = 'Failed to link account';
+    try { const e = await res.json(); msg = e.message ?? msg; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+}
+
 // ---- Recommendations ----
 
 export interface ApiRecommendationItem extends ApiItem {
   match_score?: number;
   match_reason?: string;
+}
+
+type ApiRecommendationSummary = Partial<ApiRecommendationItem> & {
+  item_id?: string;
+  score?: number;
+};
+
+function isFullApiItem(item: ApiRecommendationSummary): item is ApiRecommendationItem {
+  return Boolean(item.id && item.media_type);
 }
 
 export async function apiGetRecommendations(
@@ -234,29 +300,47 @@ export async function apiGetRecommendations(
 ): Promise<ApiRecommendationItem[]> {
   const filters: Record<string, unknown> = {};
   if (moods && moods.length > 0) filters.moods = moods;
+  try {
+    const raw = localStorage.getItem('aura_preferred_genres');
+    if (raw) {
+      const genres: string[] = JSON.parse(raw);
+      if (Array.isArray(genres) && genres.length > 0) filters.genres = genres;
+    }
+  } catch { /* ignore */ }
   const res = await apiFetch('/v1/recommendations', {
     method: 'POST',
     body: JSON.stringify({ filters }),
   });
   if (!res.ok) return [];
   const raw = await res.json();
-  const items: ApiRecommendationItem[] = Array.isArray(raw)
+  const summaries: ApiRecommendationSummary[] = Array.isArray(raw)
     ? raw
     : (raw.items ?? raw.recommendations ?? []);
 
-  const needsEnrich = items.filter(i => !i.cover_image_url || !i.criteria?.tonality);
-  if (needsEnrich.length > 0) {
-    await Promise.allSettled(
-      needsEnrich.map(async i => {
-        try {
-          const full = await apiGetContent(i.id);
-          if (!i.cover_image_url) i.cover_image_url = full.cover_image_url;
-          if (!i.criteria) i.criteria = {};
-          if (!i.criteria.tonality) i.criteria.tonality = full.criteria?.tonality;
-        } catch { /* ignore */ }
-      }),
-    );
-  }
+  const enriched = await Promise.allSettled(
+    summaries.slice(0, limit).map(async summary => {
+      const id = summary.id ?? summary.item_id;
+      if (!id) return null;
 
-  return items;
+      const match_score = summary.match_score ?? summary.score;
+      const match_reason = summary.match_reason;
+
+      if (isFullApiItem(summary) && summary.cover_image_url && summary.criteria?.tonality) {
+        return { ...summary, match_score, match_reason };
+      }
+
+      try {
+        const full = await apiGetContent(id);
+        return { ...full, match_score, match_reason };
+      } catch {
+        if (isFullApiItem(summary)) {
+          return { ...summary, match_score, match_reason };
+        }
+        return null;
+      }
+    }),
+  );
+
+  return enriched
+    .flatMap(result => result.status === 'fulfilled' && result.value ? [result.value] : []);
 }
