@@ -4,8 +4,6 @@ import json
 import logging
 import re
 
-from openai import OpenAI
-
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -44,6 +42,8 @@ def _extract_json(raw: str) -> dict:
 
 class LLMReasoningService:
     def __init__(self) -> None:
+        from openai import OpenAI
+
         settings = get_settings()
         self._client = OpenAI(
             api_key=settings.openrouter_api_key,

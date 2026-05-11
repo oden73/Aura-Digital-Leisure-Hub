@@ -22,7 +22,7 @@ func NewMetadataRepo(db *dbpostgres.Pool) *MetadataRepo { return &MetadataRepo{D
 // every read produces the same column order. Media-specific details are
 // loaded separately via getBookDetails / getCinemaDetails / getGameDetails.
 //
-// Nullable text columns are COALESCEd to '' so the scanner can read into
+// Nullable text columns are COALESCEd to ” so the scanner can read into
 // plain Go strings; the two columns that callers actually need to
 // distinguish from "absent" (release_date, average_rating) stay nullable
 // and are scanned through pointers in scanBaseItem.

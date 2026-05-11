@@ -205,9 +205,9 @@ func TestUserRepo_LinkExternalAccount_RejectsMissingFields(t *testing.T) {
 	uid := mustCreateUser(t, users, "hen", "hen@example.com")
 
 	cases := []entities.ExternalAccount{
-		{UserID: uid, ServiceName: entities.ExternalServiceSteam},                             // no external user id
-		{UserID: uid, ExternalUserID: "x"},                                                    // no service name
-		{ServiceName: entities.ExternalServiceSteam, ExternalUserID: "x"},                     // no user id
+		{UserID: uid, ServiceName: entities.ExternalServiceSteam},         // no external user id
+		{UserID: uid, ExternalUserID: "x"},                                // no service name
+		{ServiceName: entities.ExternalServiceSteam, ExternalUserID: "x"}, // no user id
 	}
 	for i, a := range cases {
 		if _, err := users.LinkExternalAccount(a); err == nil {

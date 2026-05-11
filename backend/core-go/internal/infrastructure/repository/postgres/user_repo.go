@@ -264,4 +264,3 @@ func (r *UserRepo) LinkExternalAccount(account entities.ExternalAccount) (entiti
 	account.LastSyncedAt = &lastSynced
 	return account, nil
 }
-

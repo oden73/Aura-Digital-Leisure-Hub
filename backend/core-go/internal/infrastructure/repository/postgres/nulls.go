@@ -20,4 +20,3 @@ func nullFloat(v float64) any {
 	}
 	return v
 }
-

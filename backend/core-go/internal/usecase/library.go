@@ -21,4 +21,3 @@ func NewListLibrary(interactions interface {
 func (u *ListLibrary) Execute(userID string) ([]entities.Interaction, error) {
 	return u.Interactions.GetUserInteractions(userID)
 }
-

@@ -1,15 +1,39 @@
+SHELL := /bin/bash
+
 APP_NAME=core-api
+GO?=$(shell command -v go || command -v /usr/local/go/bin/go || command -v /snap/bin/go)
+TEST_REPORT?=reports/test-report.txt
+COVERAGE_PROFILE?=reports/coverage.out
+
+# Coverage scope for the merged -coverpkg profile:
+# - internal/infrastructure/repository/postgres: exercised by integration tests (-tags=integration)
+# - cmd/api, cmd/backfill-embeddings: thin entrypoints; behaviour is covered via library packages
+COVERPKG?=$(shell $(GO) list ./... | grep -v '/internal/infrastructure/repository/postgres$$' | grep -vE '/cmd/(api|backfill-embeddings)$$' | paste -sd, -)
 
 .PHONY: run build test fmt
 
 run:
-	go run ./cmd/api
+	$(GO) run ./cmd/api
 
 build:
-	go build -o bin/$(APP_NAME) ./cmd/api
+	$(GO) build -o bin/$(APP_NAME) ./cmd/api
 
 test:
-	go test ./...
+	@mkdir -p $(dir $(TEST_REPORT)) $(dir $(COVERAGE_PROFILE))
+	@set -o pipefail; { \
+		if [ -z "$(GO)" ]; then \
+			echo "go binary not found in PATH, /usr/local/go/bin/go, or /snap/bin/go"; \
+			exit 127; \
+		fi; \
+		$(GO) test ./... -coverpkg=$(COVERPKG) -coverprofile=$(COVERAGE_PROFILE); \
+		test_status=$$?; \
+		if [ -f "$(COVERAGE_PROFILE)" ]; then \
+			echo; \
+			echo "Coverage summary:"; \
+			$(GO) tool cover -func=$(COVERAGE_PROFILE); \
+		fi; \
+		exit $$test_status; \
+	} 2>&1 | tee $(TEST_REPORT)
 
 fmt:
-	go fmt ./...
+	$(GO) fmt ./...

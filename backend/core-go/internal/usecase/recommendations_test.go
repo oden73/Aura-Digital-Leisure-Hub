@@ -50,10 +50,12 @@ func (f fakeMetadata) TopRated(limit int, _ []entities.MediaType) ([]entities.It
 
 type fakeUsers struct{}
 
-func (fakeUsers) Create(u entities.User) (entities.User, error)        { return u, nil }
-func (fakeUsers) GetByID(_ string) (entities.User, error)              { return entities.User{}, nil }
-func (fakeUsers) GetByEmail(_ string) (entities.User, error)           { return entities.User{}, nil }
-func (fakeUsers) GetProfile(_ string) (entities.UserProfile, error)    { return entities.UserProfile{}, nil }
+func (fakeUsers) Create(u entities.User) (entities.User, error) { return u, nil }
+func (fakeUsers) GetByID(_ string) (entities.User, error)       { return entities.User{}, nil }
+func (fakeUsers) GetByEmail(_ string) (entities.User, error)    { return entities.User{}, nil }
+func (fakeUsers) GetProfile(_ string) (entities.UserProfile, error) {
+	return entities.UserProfile{}, nil
+}
 func (fakeUsers) LinkExternalAccount(a entities.ExternalAccount) (entities.ExternalAccount, error) {
 	return a, nil
 }

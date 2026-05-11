@@ -29,4 +29,3 @@ func Connect(ctx context.Context, databaseURL string) (*Pool, error) {
 	}
 	return &Pool{Pool: p}, nil
 }
-
