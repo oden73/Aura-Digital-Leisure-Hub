@@ -1,0 +1,4 @@
+# Minimal deps for the unittest suite (no sentence-transformers / chromadb).
+numpy>=1.26
+fastapi>=0.110
+pydantic>=2.5

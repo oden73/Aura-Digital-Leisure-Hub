@@ -108,15 +108,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/ai-engine-python/requirements.txt
+          cache-dependency-path: backend/ai-engine-python/requirements-test.txt
 
-      # The default-import path of `tests/test_content_similarity.py`
-      # only relies on numpy + the pure-Python content-similarity
-      # service, so we install the trimmed deps that are sufficient
-      # for the unit suite. The full requirements.txt is only needed
-      # for a live FastAPI run (sentence-transformers, chromadb, …).
-      - name: Install minimal test deps
-        run: pip install --upgrade pip numpy
+      # Unit tests mock heavy adapters (Chroma, sentence-transformers, …).
+      # Full requirements.txt is only needed for a live FastAPI run.
+      - name: Install test deps
+        run: pip install --upgrade pip -r requirements-test.txt
 
       - name: Run unittest
         run: python -m unittest discover -v -s tests
