@@ -63,12 +63,12 @@ def main() -> int:
     quality = parse_recommendation_quality(read_text(quality_report))
     online_quality = parse_recommendation_quality(read_text(online_quality_report))
     statuses = parse_statuses(test_text)
-    go_coverage = parse_go_package_coverage(test_text)
     cover_stdout = ""
+    go_coverage, cover_stdout = load_go_cover_func_from_profile(reports_dir)
     if not go_coverage:
         go_coverage = aggregate_go_cover_func_lines(test_text.splitlines())
     if not go_coverage:
-        go_coverage, cover_stdout = load_go_cover_func_from_profile(reports_dir)
+        go_coverage = parse_go_package_coverage(test_text)
     python_coverage = parse_python_coverage(test_text)
     totals = parse_coverage_totals(test_text, python_coverage)
     totals = ensure_go_total_row(totals, test_text, cover_stdout, go_coverage)
@@ -401,7 +401,8 @@ def render_dashboard_html(
     .visual {{
       display: block;
       width: 100%;
-      max-width: 1040px;
+      max-width: 760px;
+      height: auto;
       margin: 8px auto 0;
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -409,26 +410,45 @@ def render_dashboard_html(
     }}
     .bars {{
       display: grid;
-      gap: 10px;
+      gap: 6px;
+    }}
+    .coverage-section h2 {{
+      text-align: right;
+    }}
+    .coverage-bars {{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
     }}
     .bar-row {{
       display: grid;
-      grid-template-columns: minmax(220px, 1.2fr) minmax(180px, 3fr) 64px;
+      grid-template-columns: auto 160px auto;
       align-items: center;
-      gap: 12px;
+      gap: 8px;
+      max-width: 100%;
       font-size: 14px;
     }}
     .bar-row > span:first-child {{
       min-width: 0;
+      max-width: min(420px, 100%);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-align: right;
+    }}
+    .bar-row > strong {{
+      min-width: 3rem;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
     }}
     .bar-track {{
+      width: 160px;
       height: 12px;
       border-radius: 999px;
       background: #e8eef7;
       overflow: hidden;
+      justify-self: start;
     }}
     .bar-fill {{
       height: 100%;
@@ -481,12 +501,12 @@ def render_dashboard_html(
       <img class="visual" src="{escape_attr(online_quality_svg_name)}" alt="Online recommendation quality chart">
     </section>
 
-    <section>
+    <section class="coverage-section">
       <h2>Go Package Coverage</h2>
       {render_html_bars(go_coverage[:12]) or render_empty_card("Go package coverage not found")}
     </section>
 
-    <section>
+    <section class="coverage-section">
       <h2>Python Module Coverage</h2>
       {render_html_bars(python_coverage[:12]) or render_empty_card("Python module coverage not found")}
     </section>
@@ -508,14 +528,12 @@ def render_coverage_svg(
     go_coverage: list[CoverageRow],
     python_coverage: list[CoverageRow],
 ) -> str:
-    rows = totals + lowest_rows("Go low coverage", go_coverage, 6) + lowest_rows(
-        "Python low coverage", python_coverage, 6
+    rows = totals + lowest_rows("Go low coverage", go_coverage, 4) + lowest_rows(
+        "Python low coverage", python_coverage, 4
     )
     return render_bar_svg(
         title="Coverage Overview",
         rows=rows,
-        width=1120,
-        row_height=32,
         max_value=100.0,
         value_suffix="%",
     )
@@ -526,8 +544,6 @@ def render_quality_svg(quality: RecommendationQuality | None, title: str) -> str
         return render_bar_svg(
             title=title,
             rows=[CoverageRow("No recommendation report", 0)],
-            width=1120,
-            row_height=32,
             max_value=1.0,
             value_suffix="",
         )
@@ -545,16 +561,9 @@ def render_quality_svg(quality: RecommendationQuality | None, title: str) -> str
         )
         if key in quality.summary
     ]
-    rows.extend(
-        CoverageRow(f"{scenario.name}: precision", scenario.metrics["precision"])
-        for scenario in quality.scenarios
-        if "precision" in scenario.metrics
-    )
     return render_bar_svg(
         title=title,
         rows=rows,
-        width=1120,
-        row_height=32,
         max_value=1.0,
         value_suffix="",
     )
@@ -582,16 +591,24 @@ def render_bar_svg(
     *,
     title: str,
     rows: list[CoverageRow],
-    width: int,
-    row_height: int,
     max_value: float,
     value_suffix: str,
+    width: int | None = None,
+    row_height: int = 26,
+    bar_width: int = 200,
+    label_gap: int = 8,
+    value_gap: int = 8,
 ) -> str:
-    left = 380
-    right = 112
+    labels = [truncate_middle(row.name, 40) for row in rows]
+    label_width = min(
+        280,
+        max((len(label) for label in labels), default=8) * 7 + 8,
+    )
+    bar_start = 28 + label_width + label_gap
+    value_start = bar_start + bar_width + value_gap
+    width = width or value_start + 52
     top = 70
-    bar_width = width - left - right
-    height = top + len(rows) * row_height + 28
+    height = top + len(rows) * row_height + 24
     parts = [
         svg_header(width, height),
         f'<rect width="100%" height="100%" rx="18" fill="#ffffff"/>',
@@ -603,14 +620,14 @@ def render_bar_svg(
         fill_width = 0 if max_value == 0 else bar_width * value / max_value
         color = color_for_percent(value, max_value)
         value_text = f"{row.percent:.1f}{value_suffix}" if value_suffix else f"{row.percent:.3f}"
-        label = truncate_middle(row.name, 46)
+        label = labels[index]
         title_node = "" if label == row.name else f"<title>{escape(row.name)}</title>"
         parts.extend(
             [
-                f'<text x="28" y="{y + 18}" font-size="13" fill="#344054">{title_node}{escape(label)}</text>',
-                f'<rect x="{left}" y="{y + 4}" width="{bar_width}" height="16" rx="8" fill="#e8eef7"/>',
-                f'<rect x="{left}" y="{y + 4}" width="{fill_width:.1f}" height="16" rx="8" fill="{color}"/>',
-                f'<text x="{left + bar_width + 16}" y="{y + 18}" font-size="13" font-weight="700" fill="#172033">{escape(value_text)}</text>',
+                f'<text x="{bar_start - label_gap}" y="{y + 17}" font-size="13" fill="#344054" text-anchor="end">{title_node}{escape(label)}</text>',
+                f'<rect x="{bar_start}" y="{y + 4}" width="{bar_width}" height="16" rx="8" fill="#e8eef7"/>',
+                f'<rect x="{bar_start}" y="{y + 4}" width="{fill_width:.1f}" height="16" rx="8" fill="{color}"/>',
+                f'<text x="{value_start}" y="{y + 17}" font-size="13" font-weight="700" fill="#172033">{escape(value_text)}</text>',
             ]
         )
     parts.append("</svg>")
@@ -663,14 +680,20 @@ def render_html_bars(rows: list[CoverageRow]) -> str:
             f"<strong>{row.percent:.1f}%</strong>"
             "</div>"
         )
-    return f'<div class="bars">{"".join(bars)}</div>'
+    return f'<div class="bars coverage-bars">{"".join(bars)}</div>'
 
 
 def lowest_rows(prefix: str, rows: list[CoverageRow], limit: int) -> list[CoverageRow]:
-    return [
-        CoverageRow(f"{prefix}: {row.name}", row.percent)
-        for row in sorted(rows, key=lambda row: row.percent)[:limit]
-    ]
+    seen: set[str] = set()
+    selected: list[CoverageRow] = []
+    for row in sorted(rows, key=lambda row: row.percent):
+        if row.name in seen:
+            continue
+        seen.add(row.name)
+        selected.append(CoverageRow(f"{prefix}: {row.name}", row.percent))
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def short_go_package(package: str) -> str:
