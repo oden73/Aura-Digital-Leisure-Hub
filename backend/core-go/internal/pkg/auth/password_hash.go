@@ -35,4 +35,3 @@ func ComparePassword(stored, password string) error {
 	}
 	return nil
 }
-

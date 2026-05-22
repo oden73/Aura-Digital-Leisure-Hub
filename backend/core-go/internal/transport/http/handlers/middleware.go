@@ -38,4 +38,3 @@ func authMiddleware(tokens auth.TokenManager, next http.HandlerFunc) http.Handle
 func Auth(tokens auth.TokenManager, next http.HandlerFunc) http.HandlerFunc {
 	return authMiddleware(tokens, next)
 }
-

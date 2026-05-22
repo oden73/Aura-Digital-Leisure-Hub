@@ -123,4 +123,3 @@ func randID() string {
 	_, _ = rand.Read(b[:])
 	return base64.RawURLEncoding.EncodeToString(b[:])
 }
-

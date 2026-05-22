@@ -21,4 +21,3 @@ func NewGetContent(metadata interface {
 func (u *GetContent) Execute(itemID string) (entities.Item, error) {
 	return u.Metadata.GetItem(itemID)
 }
-

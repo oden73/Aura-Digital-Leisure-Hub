@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"aura/backend/core-go/internal/domain/entities"
+	"aura/backend/core-go/internal/infrastructure/clients/ai_engine"
 	repopostgres "aura/backend/core-go/internal/infrastructure/repository/postgres"
 	"aura/backend/core-go/internal/usecase"
 )
@@ -133,6 +134,40 @@ type fakeUserLookup struct {
 
 func (f *fakeUserLookup) GetByID(uid string) (entities.User, error) {
 	f.in = uid
+	return f.resp, f.err
+}
+
+type fakeStatsReader struct {
+	in    string
+	stats entities.UserStats
+	err   error
+}
+
+func (f *fakeStatsReader) GetStats(uid string) (entities.UserStats, error) {
+	f.in = uid
+	return f.stats, f.err
+}
+
+type fakeAIChatClient struct {
+	req  ai_engine.ChatRequest
+	resp ai_engine.ChatResponse
+	err  error
+}
+
+func (f *fakeAIChatClient) ComputeCB(_ ai_engine.Request) (ai_engine.Response, error) {
+	return ai_engine.Response{}, nil
+}
+
+func (f *fakeAIChatClient) GenerateReasoning(_ string, _ []entities.ScoredItem) (string, error) {
+	return "", nil
+}
+
+func (f *fakeAIChatClient) GenerateEmbedding(_ ai_engine.EmbeddingRequest) error {
+	return nil
+}
+
+func (f *fakeAIChatClient) Chat(req ai_engine.ChatRequest) (ai_engine.ChatResponse, error) {
+	f.req = req
 	return f.resp, f.err
 }
 
@@ -545,5 +580,152 @@ func TestHandleGetProfile_OmitsPasswordHash(t *testing.T) {
 	}
 	if resp.Username != "alice" || resp.Email != "a@b.c" {
 		t.Fatalf("unexpected profile: %+v", resp)
+	}
+}
+
+// ---------- constructors / liveness -----------------------------------------
+
+func TestNewWiresUseCases(t *testing.T) {
+	recs := &fakeGetRecs{}
+	search := &fakeSearch{}
+	update := &fakeUpdateInt{}
+	sync := &fakeSync{}
+
+	h := New(recs, search, update, sync)
+
+	if h.GetRecommendations != recs || h.Search != search ||
+		h.UpdateInteraction != update || h.SyncExternal != sync {
+		t.Fatalf("handlers were not wired correctly: %+v", h)
+	}
+}
+
+func TestHealthWritesPlainOK(t *testing.T) {
+	w := httptest.NewRecorder()
+
+	Health(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if w.Code != http.StatusOK || w.Body.String() != "ok" {
+		t.Fatalf("health response = %d %q", w.Code, w.Body.String())
+	}
+}
+
+// ---------- stats ------------------------------------------------------------
+
+func TestHandleGetStats_RequiresAuth(t *testing.T) {
+	h := &Handlers{Stats: usecase.NewGetUserStats(&fakeStatsReader{})}
+	w := httptest.NewRecorder()
+
+	h.HandleGetStats(w, httptest.NewRequest(http.MethodGet, "/v1/profile/stats", nil))
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestHandleGetStats_NotConfigured(t *testing.T) {
+	h := &Handlers{}
+	r := withUser(httptest.NewRequest(http.MethodGet, "/v1/profile/stats", nil), "u-1")
+	w := httptest.NewRecorder()
+
+	h.HandleGetStats(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestHandleGetStats_OK(t *testing.T) {
+	repo := &fakeStatsReader{stats: entities.UserStats{TotalInteractions: 2, FavoriteCount: 1}}
+	h := &Handlers{Stats: usecase.NewGetUserStats(repo)}
+	r := withUser(httptest.NewRequest(http.MethodGet, "/v1/profile/stats", nil), "u-1")
+	w := httptest.NewRecorder()
+
+	h.HandleGetStats(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if repo.in != "u-1" {
+		t.Fatalf("stats repo received user %q", repo.in)
+	}
+	var stats entities.UserStats
+	if err := json.Unmarshal(w.Body.Bytes(), &stats); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if stats.TotalInteractions != 2 || stats.FavoriteCount != 1 {
+		t.Fatalf("stats = %+v", stats)
+	}
+}
+
+func TestHandleGetStats_Error(t *testing.T) {
+	h := &Handlers{Stats: usecase.NewGetUserStats(&fakeStatsReader{err: errors.New("db")})}
+	r := withUser(httptest.NewRequest(http.MethodGet, "/v1/profile/stats", nil), "u-1")
+	w := httptest.NewRecorder()
+
+	h.HandleGetStats(w, r)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+// ---------- assistant --------------------------------------------------------
+
+func TestHandleAssistantChat_NotConfigured(t *testing.T) {
+	h := &Handlers{}
+	w := httptest.NewRecorder()
+
+	h.HandleAssistantChat(w, httptest.NewRequest(http.MethodPost, "/v1/assistant", strings.NewReader(`{}`)))
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", w.Code)
+	}
+}
+
+func TestHandleAssistantChat_Validation(t *testing.T) {
+	cases := []string{`{`, `{"message":""}`}
+	for _, body := range cases {
+		h := &Handlers{AIClient: &fakeAIChatClient{}}
+		w := httptest.NewRecorder()
+
+		h.HandleAssistantChat(w, httptest.NewRequest(http.MethodPost, "/v1/assistant", strings.NewReader(body)))
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("body %q: expected 400, got %d", body, w.Code)
+		}
+	}
+}
+
+func TestHandleAssistantChat_OKNormalizesNilRecommendationIDs(t *testing.T) {
+	client := &fakeAIChatClient{resp: ai_engine.ChatResponse{Text: "hello"}}
+	h := &Handlers{AIClient: client}
+	body := `{"message":"hi","history":[{"role":"user","content":"previous"}]}`
+	w := httptest.NewRecorder()
+
+	h.HandleAssistantChat(w, httptest.NewRequest(http.MethodPost, "/v1/assistant", strings.NewReader(body)))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if client.req.Message != "hi" || len(client.req.History) != 1 || client.req.History[0].Content != "previous" {
+		t.Fatalf("unexpected chat request: %+v", client.req)
+	}
+	var resp assistantChatResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Text != "hello" || resp.RecommendationIDs == nil || len(resp.RecommendationIDs) != 0 {
+		t.Fatalf("response = %+v", resp)
+	}
+}
+
+func TestHandleAssistantChat_AIError(t *testing.T) {
+	h := &Handlers{AIClient: &fakeAIChatClient{err: errors.New("ai down")}}
+	w := httptest.NewRecorder()
+
+	h.HandleAssistantChat(w, httptest.NewRequest(http.MethodPost, "/v1/assistant", strings.NewReader(`{"message":"hi"}`)))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
 	}
 }

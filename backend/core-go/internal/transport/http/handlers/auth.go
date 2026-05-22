@@ -115,4 +115,3 @@ func (a *AuthHandlers) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 func authHash(password string) (string, error) {
 	return auth.HashPassword(password)
 }
-

@@ -61,8 +61,11 @@ env/
 htmlcov/
 
 # ===== Go / core service =====
+backend/reports/
 backend/core-go/bin/
 backend/core-go/build/
+backend/core-go/reports/
+backend/ai-engine-python/reports/
 *.test
 *.out
 vendor/

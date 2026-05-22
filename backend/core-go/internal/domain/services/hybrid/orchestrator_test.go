@@ -94,3 +94,32 @@ func TestOrchestrator_ProfileLookupErrorFallsBackToZeroProfile(t *testing.T) {
 		t.Fatalf("expected zero profile on error, got %#v", rule.captured.UserProfile)
 	}
 }
+
+type stubMetadata struct {
+	items map[string]entities.Item
+}
+
+func (s stubMetadata) GetItem(id string) (entities.Item, error) {
+	return s.items[id], nil
+}
+
+func TestOrchestrator_WithMetadataEnrichesRankingContext(t *testing.T) {
+	rule := &captureRule{}
+	meta := stubMetadata{items: map[string]entities.Item{
+		"a": {ID: "a", Title: "Item A"},
+	}}
+	orch := NewOrchestrator(
+		stubCoordinator{scores: []entities.ScoredItem{{ItemID: "a", Score: 1}}},
+		stubAIClient{},
+		NewScoreAggregator(0.5, 0.5),
+		NewFinalRanker(rule),
+	).WithMetadata(meta)
+
+	if _, err := orch.GetHybridRecommendations("u-1", 10, entities.RecommendationFilters{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got, ok := rule.captured.ItemMeta["a"]
+	if !ok || got.Title != "Item A" {
+		t.Fatalf("metadata not in context: %#v", rule.captured.ItemMeta)
+	}
+}

@@ -68,9 +68,9 @@ func TestApply_FiltersByReleasePeriod(t *testing.T) {
 	t3 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	s := New().WithMetadata(fakeMeta{items: map[string]entities.Item{
-		"old":    {ReleaseDate: &t1},
-		"middle": {ReleaseDate: &t2},
-		"new":    {ReleaseDate: &t3},
+		"old":     {ReleaseDate: &t1},
+		"middle":  {ReleaseDate: &t2},
+		"new":     {ReleaseDate: &t3},
 		"undated": {},
 	}})
 	from := time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
